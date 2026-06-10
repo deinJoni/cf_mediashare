@@ -1,0 +1,12 @@
+# Local development variables for `wrangler dev`.
+# Copy to `.dev.vars` (gitignored) and adjust. These mirror the `vars` block in
+# wrangler.jsonc plus any local-only stubs.
+
+# When set to "true", the Worker trusts a stubbed identity header instead of
+# verifying a real Cloudflare Access JWT — local dev only, never in production.
+DEV_STUB_ACCESS="true"
+DEV_STUB_EMAIL="you@example.com"
+
+# Cloudflare Access (Zero Trust) — fill these for real JWT verification.
+# ACCESS_TEAM_DOMAIN="your-team.cloudflareaccess.com"
+# ACCESS_AUD="<application-audience-tag-from-access>"

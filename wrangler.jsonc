@@ -1,0 +1,51 @@
+{
+  // Single-Worker deployment: this Worker hosts the API, media serving, access
+  // enforcement, AND serves the built web app (apps/web/dist) as static assets.
+  // See DEVELOPMENT.md → "one Worker, not two deploys".
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cf-mediashare",
+  "main": "apps/worker/src/index.ts",
+  "compatibility_date": "2025-05-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+  },
+
+  // Built frontend, served as static assets. `/api/*` runs the Worker first;
+  // everything else serves a static file, falling back to index.html (SPA).
+  "assets": {
+    "directory": "apps/web/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"],
+  },
+
+  // Blob storage: originals + derived sizes (thumb/display). Free egress.
+  "r2_buckets": [
+    {
+      "binding": "MEDIA_BUCKET",
+      "bucket_name": "cf-mediashare-media",
+    },
+  ],
+
+  // Metadata DB: users, groups, memberships, media.
+  // `database_id` is created per-deployment — `pnpm setup` fills it in for you,
+  // or paste the id from `wrangler d1 create cf-mediashare-db`.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "cf-mediashare-db",
+      "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID",
+      "migrations_dir": "migrations",
+    },
+  ],
+
+  // Non-secret config. Secrets (OAuth, etc.) go via `wrangler secret put`.
+  // Access values come from your Cloudflare Zero Trust dashboard.
+  "vars": {
+    "ACCESS_TEAM_DOMAIN": "",
+    "ACCESS_AUD": "",
+    "MAX_UPLOAD_BYTES": "1073741824",
+    "ALLOWED_MIME_PREFIXES": "image/,video/",
+  },
+}
