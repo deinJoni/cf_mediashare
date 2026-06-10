@@ -49,59 +49,64 @@ Cloudflare Access is configured once in the dashboard (or via API) and documente
 Milestone tags: **M1** = personal MVP, **M2** = OSS-ready, **M3** = optional layers.
 
 ### Phase 0 — Scaffold · M1
+
 **Goal:** an empty but deployable skeleton.
 
-- [ ] Init pnpm workspaces + Turborepo pipeline (build / typecheck / lint)
-- [ ] Shared `tsconfig`, eslint, prettier
-- [ ] `apps/web`, `apps/worker`, `packages/shared` workspaces
-- [ ] `wrangler.jsonc` with R2 + D1 bindings; worker serves a placeholder page
-- [ ] `scripts/setup` provisioning script
-- [ ] CI: typecheck + lint + build on PR
+- [x] Init pnpm workspaces + Turborepo pipeline (build / typecheck / lint)
+- [x] Shared `tsconfig`, eslint, prettier
+- [x] `apps/web`, `apps/worker`, `packages/shared` workspaces
+- [x] `wrangler.jsonc` with R2 + D1 bindings; worker serves a placeholder page
+- [x] `scripts/setup` provisioning script
+- [x] CI: typecheck + lint + build on PR
 
 **Accept:** `wrangler deploy` works and serves a placeholder; CI green.
 
 ### Phase 1 — Identity & data foundation · M1
-**Goal:** the app knows who you are and your groups. *(F1, F2)*
+
+**Goal:** the app knows who you are and your groups. _(F1, F2)_
 **Depends on:** Phase 0.
 
-- [ ] D1 schema + migrations: `users`, `groups`, `memberships`, `media`
-- [ ] Seed script for initial groups + memberships
-- [ ] Access configured; Worker JWT-verify middleware (validates against account keys)
-- [ ] `GET /me` → identity + resolved group memberships
-- [ ] Web shell: auth-aware, shows current user + their groups
+- [x] D1 schema + migrations: `users`, `groups`, `memberships`, `media`
+- [x] Seed script for initial groups + memberships
+- [x] Access configured; Worker JWT-verify middleware (validates against account keys)
+- [x] `GET /me` → identity + resolved group memberships
+- [x] Web shell: auth-aware, shows current user + their groups
 
 **Accept:** an invited user loads the app and sees their identity/groups; an un-invited email is blocked before any handler.
 
 ### Phase 2 — Vertical slice: upload + view one item · M1
-**Goal:** upload a photo, see it — architecture proven end-to-end. *(thin F3, F5)*
+
+**Goal:** upload a photo, see it — architecture proven end-to-end. _(thin F3, F5)_
 **Depends on:** Phase 1. **Locks the shared contracts.**
 
-- [ ] `POST /uploads/presign` → presigned PUT URLs (group-checked)
-- [ ] `POST /media` → insert media row after upload
-- [ ] Web upload component: client-side `thumb` + `display` + video poster generation
-- [ ] Direct PUT to R2 from the browser
-- [ ] `GET /media/:id/:size` serve endpoint: JWT + group filter + R2 stream with range support
-- [ ] Web: render the uploaded image via the serve URL
+- [x] `POST /uploads/presign` → presigned PUT URLs (group-checked)
+- [x] `POST /media` → insert media row after upload
+- [x] Web upload component: client-side `thumb` + `display` + video poster generation
+- [x] Direct PUT to R2 from the browser
+- [x] `GET /media/:id/:size` serve endpoint: JWT + group filter + R2 stream with range support
+- [x] Web: render the uploaded image via the serve URL
 
 **Accept:** a photo uploads directly to R2 (bytes do not proxy through the Worker) and renders back through the serve endpoint; cross-group access returns 403.
 
 ### Phase 3 — Gallery & viewing · M1
-**Goal:** browse and view a real library. *(F4, F5)*
+
+**Goal:** browse and view a real library. _(F4, F5)_
 **Depends on:** Phase 2.
 
-- [ ] `GET /groups/:id/media` → group-filtered, paginated, newest-first
-- [ ] Web: per-group thumbnail grid, lazy-loaded, with group switcher
-- [ ] Lightbox at `display` size; explicit fetch of `original`
-- [ ] Video player with range-based seeking
-- [ ] Edge-cache `thumb` + `display` responses
+- [x] `GET /groups/:id/media` → group-filtered, paginated, newest-first
+- [x] Web: per-group thumbnail grid, lazy-loaded, with group switcher
+- [x] Lightbox at `display` size; explicit fetch of `original`
+- [x] Video player with range-based seeking
+- [x] Edge-cache `thumb` + `display` responses
 
 **Accept:** grid loads only thumbnails; lightbox loads display; video seeks without full download.
 
 ### Phase 4 — Download · M1
-**Goal:** single + bulk download on desktop and mobile. *(F6)*
+
+**Goal:** single + bulk download on desktop and mobile. _(F6)_
 **Depends on:** Phase 3.
 
-- [ ] Single-file download (`Content-Disposition: attachment`)
+- [x] Single-file download (`Content-Disposition: attachment`)
 - [ ] Desktop bulk: client-side streaming ZIP (File System Access API)
 - [ ] Mobile bulk: Worker-generated streaming ZIP (store mode) → single URL for the OS download manager
 - [ ] Bound archives into chunks for resumability
@@ -109,18 +114,20 @@ Milestone tags: **M1** = personal MVP, **M2** = OSS-ready, **M3** = optional lay
 **Accept:** bulk download incurs no egress charge and does not exhaust Worker memory; mobile download lands in the OS download manager.
 
 ### Phase 5 — Manage & robustness · M1 (completes MVP)
-**Goal:** full basic feature set. *(F7, F8, full F3)*
+
+**Goal:** full basic feature set. _(F7, F8, full F3)_
 **Depends on:** Phase 3.
 
-- [ ] Delete: remove D1 row + all R2 keys (original/display/thumb)
-- [ ] Edit caption
-- [ ] Multipart upload for large videos; progress + retry
-- [ ] Metadata display (uploader, date, dimensions/duration)
-- [ ] Empty/error states; mobile responsiveness pass
+- [x] Delete: remove D1 row + all R2 keys (original/display/thumb)
+- [x] Edit caption
+- [ ] Multipart upload for large videos (progress + retry shipped; single PUT covers ≤5 GiB)
+- [x] Metadata display (uploader, date, dimensions/duration)
+- [x] Empty/error states; mobile responsiveness pass
 
 **Accept:** deletion removes all R2 keys for the item; a 500 MB video uploads with progress and is retryable.
 
 ### Phase 6 — OSS readiness · M2
+
 **Goal:** someone else can clone and deploy.
 **Depends on:** Phase 5.
 
@@ -133,6 +140,7 @@ Milestone tags: **M1** = personal MVP, **M2** = OSS-ready, **M3** = optional lay
 **Accept:** a fresh Cloudflare account goes from clone to working deployment by following `DEPLOY.md` alone.
 
 ### Phase 7 — Optional layers · M3
+
 **Goal:** opt-in enhancements; none required for core use.
 **Depends on:** Phase 5+.
 

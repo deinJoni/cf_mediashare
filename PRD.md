@@ -1,6 +1,6 @@
 # PRD — Self-Hosted Photo & Video Sharing (OSS, Cloudflare-native)
 
-*Working name: `<project>` (rename on adoption). Status: draft. Target v1 platform: Cloudflare. Last updated: June 2026.*
+_Working name: `<project>` (rename on adoption). Status: draft. Target v1 platform: Cloudflare. Last updated: June 2026._
 
 ---
 
@@ -15,6 +15,7 @@ This is **not** a hosted SaaS. There is no multi-tenant operator; every user is 
 ## 2. Goals & Non-Goals
 
 ### Goals
+
 - Clone → deploy to your own Cloudflare account in well under an hour.
 - Private media sharing within groups, gated to known identities.
 - Zero egress cost on media (R2), low flat monthly cost per deployment.
@@ -22,6 +23,7 @@ This is **not** a hosted SaaS. There is no multi-tenant operator; every user is 
 - Sensible, documented configuration; secrets stay in the deployer's account.
 
 ### Non-Goals (v1)
+
 - No public/anonymous sharing or unauthenticated links.
 - No multi-tenant hosting / no central operator.
 - No social features (likes/follows), no AI search/faces.
@@ -48,62 +50,71 @@ A deployer needs only a **Cloudflare account**. Provisioning is the standard Clo
 ## 5. Functional Requirements (basic feature set)
 
 ### F1. Access & authentication
+
 - App is gated by Cloudflare Access; only allowed identities can load it.
 - Every request carries a verifiable Access JWT; the Worker derives the member's email from it.
-- *Accept:* an un-invited email cannot reach any media or API.
+- _Accept:_ an un-invited email cannot reach any media or API.
 
 ### F2. Users & groups
+
 - Groups are data (D1 rows), not hardcoded; a deployment can have N groups.
 - Members map to one or more groups via a `memberships` table.
 - v1: seeded via migration/config. Later: minimal admin UI to invite + assign.
-- *Accept:* a member sees only media in groups they belong to.
+- _Accept:_ a member sees only media in groups they belong to.
 
 ### F3. Upload
+
 - Upload photos and videos from desktop and mobile web.
 - Client generates `thumb` (~300px) and `display` (~1600px) for images and a poster frame for videos before upload.
 - Files go **directly to R2** via presigned PUT (multipart for large videos); only metadata round-trips through the Worker.
 - Upload progress shown; failed uploads are retryable.
-- *Accept:* a 500 MB video uploads without proxying bytes through the Worker.
+- _Accept:_ a 500 MB video uploads without proxying bytes through the Worker.
 
 ### F4. Browse / gallery
+
 - Per-group grid of thumbnails, newest first, lazy-loaded.
 - Switch between the groups the member belongs to.
-- *Accept:* grid loads only thumbnails, never originals.
+- _Accept:_ grid loads only thumbnails, never originals.
 
 ### F5. View / playback
+
 - Lightbox shows the `display` size; explicit action fetches the true `original`.
 - Video plays with HTTP range support (seeking, progressive playback).
-- *Accept:* seeking a video does not download the whole file first.
+- _Accept:_ seeking a video does not download the whole file first.
 
 ### F6. Download
+
 - Single-file download of the original.
 - Bulk "download all / download selection":
   - Desktop: client-side streaming ZIP to disk.
   - Mobile: Worker-generated single streaming ZIP (store mode) handed to the OS download manager; archives bounded into chunks for resumability.
-- *Accept:* bulk download incurs no egress charge and does not exhaust Worker memory.
+- _Accept:_ bulk download incurs no egress charge and does not exhaust Worker memory.
 
 ### F7. Manage / delete
+
 - Uploader (and operator) can delete a media item; deletes the D1 row and all R2 keys for that item.
 - Edit caption.
-- *Accept:* deletion removes original, display, and thumb from R2.
+- _Accept:_ deletion removes original, display, and thumb from R2.
 
 ### F8. Metadata
+
 - Per item: group, uploader, kind, dimensions/duration, caption, created date.
 
 ## 6. Architecture & Stack
 
-| Concern | Cloudflare service | Role |
-|---|---|---|
-| Frontend hosting | Pages | Serves the web app |
-| Auth | Access (Zero Trust) | Gates app to invited identities; issues per-request JWT |
-| Compute / API | Workers | Serving, access enforcement, metadata API; native R2 + D1 bindings |
-| Metadata DB | D1 | Users, groups, memberships, media |
-| Blob storage | R2 | Originals + derived sizes; free egress |
-| (Optional) thumbnails | Images | On-the-fly resizing if client-side generation is dropped |
-| (Optional) video at scale | Stream | Adaptive bitrate if direct MP4 is outgrown |
-| (Optional) presence | Durable Objects / PartyServer | Live "who's viewing", live new-item push |
+| Concern                   | Cloudflare service            | Role                                                               |
+| ------------------------- | ----------------------------- | ------------------------------------------------------------------ |
+| Frontend hosting          | Pages                         | Serves the web app                                                 |
+| Auth                      | Access (Zero Trust)           | Gates app to invited identities; issues per-request JWT            |
+| Compute / API             | Workers                       | Serving, access enforcement, metadata API; native R2 + D1 bindings |
+| Metadata DB               | D1                            | Users, groups, memberships, media                                  |
+| Blob storage              | R2                            | Originals + derived sizes; free egress                             |
+| (Optional) thumbnails     | Images                        | On-the-fly resizing if client-side generation is dropped           |
+| (Optional) video at scale | Stream                        | Adaptive bitrate if direct MP4 is outgrown                         |
+| (Optional) presence       | Durable Objects / PartyServer | Live "who's viewing", live new-item push                           |
 
 ### Access-control model
+
 1. **Org gate (Access):** only invited identities load the app.
 2. **Per-group enforcement (Worker + D1):** Worker verifies the JWT, resolves the member's groups, and filters all queries/serving to those groups. D1 has no row-level security, so this filter lives explicitly in the Worker — the single trusted enforcement point.
 
@@ -112,12 +123,14 @@ Because all media is served through the Worker and the Worker sits behind Access
 ### Data model
 
 **D1**
+
 - `users` — id, email, created_at
 - `groups` — id, name
 - `memberships` — user_id, group_id
 - `media` — id, group_id, uploader_id, kind, r2_key_original, r2_key_display, r2_key_thumb, width, height, duration, caption, created_at
 
 **R2** (private bucket, prefix per group)
+
 ```
 <group_id>/<media_id>/original.<ext>
 <group_id>/<media_id>/display.jpg
@@ -125,6 +138,7 @@ Because all media is served through the Worker and the Worker sits behind Access
 ```
 
 ### Key flows
+
 - **Upload:** derive sizes client-side → request presigned PUTs (Worker checks group) → upload to R2 → insert media row.
 - **View:** query media (Worker filters to member's groups) → `<img>/<video>` hit the Worker → stream from R2 with range support → edge-cache thumb/display.
 - **Bulk download:** desktop client-side zip; mobile Worker-streamed zip to OS download manager.
@@ -154,16 +168,16 @@ LICENSE          # MIT or Apache-2.0
 
 ## 9. Cost Model (per deployment, paid by the deployer)
 
-*Point-in-time, mid-2026; deployers should verify current pricing.*
+_Point-in-time, mid-2026; deployers should verify current pricing._
 
-| Service | Plan / usage | Est. monthly |
-|---|---|---|
-| Access | Free (≤50 users) | $0 |
-| Pages | Free tier | $0 |
-| D1 | Free tier | $0 |
-| R2 | ~100 GB, free egress | ~$1.35 |
-| Workers | Paid (CPU headroom for zip; required for Durable Objects) | $5.00 |
-| **Total** | | **~$5–7 / month** |
+| Service   | Plan / usage                                              | Est. monthly      |
+| --------- | --------------------------------------------------------- | ----------------- |
+| Access    | Free (≤50 users)                                          | $0                |
+| Pages     | Free tier                                                 | $0                |
+| D1        | Free tier                                                 | $0                |
+| R2        | ~100 GB, free egress                                      | ~$1.35            |
+| Workers   | Paid (CPU headroom for zip; required for Durable Objects) | $5.00             |
+| **Total** |                                                           | **~$5–7 / month** |
 
 Workers can stay free (100k req/day) if neither server-side bulk-zip nor presence is used, dropping to ~$1.35/month.
 

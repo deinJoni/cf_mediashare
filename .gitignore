@@ -32,3 +32,7 @@ pnpm-debug.log*
 .vscode/*
 !.vscode/extensions.json
 *.swp
+
+# Local agent state
+.claude/
+.playwright-mcp/

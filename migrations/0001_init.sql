@@ -6,7 +6,9 @@ PRAGMA foreign_keys = ON;
 CREATE TABLE users (
   id         TEXT PRIMARY KEY,
   email      TEXT NOT NULL UNIQUE,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  -- Operators (deployers) can manage any media item, not just their own.
+  is_admin   INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
 CREATE TABLE groups (
@@ -34,8 +36,12 @@ CREATE TABLE media (
   height          INTEGER,
   duration        REAL,
   caption         TEXT,
-  created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+  file_name       TEXT NOT NULL,
+  content_type    TEXT NOT NULL,
+  size_bytes      INTEGER NOT NULL,
+  -- ISO 8601 with milliseconds so cursor pagination rarely ties (id breaks ties).
+  created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
 -- Gallery query: group-filtered, newest-first (F4).
-CREATE INDEX idx_media_group_created ON media (group_id, created_at DESC);
+CREATE INDEX idx_media_group_created ON media (group_id, created_at DESC, id DESC);

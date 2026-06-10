@@ -1,7 +1,12 @@
 import { Hono } from 'hono'
-import type { HealthResponse, MeResponse } from '@cf-mediashare/shared'
+import type { HealthResponse } from '@cf-mediashare/shared'
 import type { AppBindings } from './env.js'
+import { apiError } from './lib/errors.js'
 import { accessMiddleware } from './middleware/access.js'
+import { memberMiddleware } from './middleware/member.js'
+import { mediaRoutes } from './routes/media.js'
+import { meRoutes } from './routes/me.js'
+import { uploadRoutes } from './routes/uploads.js'
 
 const app = new Hono<AppBindings>()
 
@@ -12,17 +17,24 @@ app.get('/api/health', (c) => {
 })
 
 /**
- * `GET /api/me` — identity + resolved groups (F1, F2).
- * Phase 0: returns the verified email with no groups. Phase 1 resolves real
- * groups from D1.
+ * Everything else under /api requires a verified Access identity (F1) that
+ * resolves to a seeded member (F2). Registered after /api/health so the probe
+ * stays public; per-group authorization happens inside each route, because D1
+ * has no row-level security and the Worker is the single enforcement point.
  */
-app.get('/api/me', accessMiddleware, (c) => {
-  const email = c.get('email')
-  const body: MeResponse = {
-    user: { id: email, email },
-    groups: [],
-  }
-  return c.json(body)
+app.use('/api/*', accessMiddleware, memberMiddleware)
+
+app.route('/api', meRoutes)
+app.route('/api', uploadRoutes)
+app.route('/api', mediaRoutes)
+
+/** Unknown API paths get the JSON error envelope, never the SPA fallback. */
+app.all('/api/*', (c) => c.json(apiError('not_found'), 404))
+
+/** Uncaught errors stay inside the ApiError envelope contract. */
+app.onError((err, c) => {
+  console.error(err)
+  return c.json(apiError('internal', 'Unexpected error'), 500)
 })
 
 /**

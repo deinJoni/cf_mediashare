@@ -1,19 +1,22 @@
 #!/usr/bin/env node
 /**
- * One-shot provisioning for a fresh Cloudflare account (DEVELOPMENT.md → Phase 0).
+ * One-shot provisioning for a fresh Cloudflare account.
  *
- * Creates the R2 bucket and D1 database, writes the D1 id into wrangler.jsonc,
- * and applies migrations. Idempotent: re-running skips resources that exist.
+ * Creates the R2 bucket and D1 database, writes the D1 id + account id into
+ * wrangler.jsonc, applies migrations, and sets the bucket CORS rules needed for
+ * direct-to-R2 browser uploads. Idempotent: re-running skips what exists.
  *
- *   pnpm setup            # provision + apply migrations to the remote D1
- *   pnpm setup --local    # also create/apply the local dev D1
+ *   pnpm setup                          # provision + migrate (remote)
+ *   pnpm setup --local                  # also migrate the local dev D1
+ *   pnpm setup --origin https://x.dev   # restrict upload CORS to your app origin
  *
  * Requires: `wrangler login` (or CLOUDFLARE_API_TOKEN) beforehand.
  */
 import { spawnSync } from 'node:child_process'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
-import { dirname, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(__dirname, '../..')
@@ -24,6 +27,8 @@ const D1_NAME = 'cf-mediashare-db'
 const ID_PLACEHOLDER = 'REPLACE_WITH_YOUR_D1_DATABASE_ID'
 
 const withLocal = process.argv.includes('--local')
+const originFlag = process.argv.indexOf('--origin')
+const corsOrigin = originFlag !== -1 ? process.argv[originFlag + 1] : '*'
 
 /** Run wrangler, capturing stdout. Returns { ok, stdout, stderr }. */
 function wrangler(args, { capture = true } = {}) {
@@ -63,6 +68,40 @@ function ensureBucket() {
   process.stdout.write('  created\n')
 }
 
+// --- R2 CORS ----------------------------------------------------------------
+// Direct-to-R2 uploads are presigned PUTs from the browser, so the bucket must
+// answer CORS preflights. This is not a data-exposure surface: the bucket stays
+// private and only signed URLs grant access — CORS merely lets the browser send
+// the PUT. Pass --origin to pin it to your app origin instead of "*".
+function setBucketCors() {
+  log(`Setting CORS rules on "${R2_BUCKET}" (origin: ${corsOrigin})`)
+  const rules = [
+    {
+      AllowedOrigins: [corsOrigin],
+      AllowedMethods: ['GET', 'PUT'],
+      AllowedHeaders: ['content-type'],
+      MaxAgeSeconds: 3600,
+    },
+  ]
+  const tmp = mkdtempSync(join(tmpdir(), 'cf-mediashare-'))
+  const file = join(tmp, 'cors.json')
+  writeFileSync(file, JSON.stringify(rules, null, 2))
+  try {
+    const res = wrangler(['r2', 'bucket', 'cors', 'set', R2_BUCKET, '--file', file, '--force'])
+    if (!res.ok) {
+      // Non-fatal: uploads still work via the Worker proxy fallback without CORS.
+      process.stdout.write(
+        `  ⚠ could not set CORS (${res.stderr.trim().split('\n')[0]}) — set it later:\n` +
+          `    pnpm exec wrangler r2 bucket cors set ${R2_BUCKET} --file <rules.json>\n`,
+      )
+      return
+    }
+    process.stdout.write('  done\n')
+  } finally {
+    rmSync(tmp, { recursive: true, force: true })
+  }
+}
+
 // --- D1 database -----------------------------------------------------------
 function findExistingD1Id() {
   const res = wrangler(['d1', 'list', '--json'])
@@ -92,22 +131,32 @@ function ensureD1() {
   return id
 }
 
+// --- Account id -------------------------------------------------------------
+function findAccountId() {
+  if (process.env.CLOUDFLARE_ACCOUNT_ID) return process.env.CLOUDFLARE_ACCOUNT_ID
+  const res = wrangler(['whoami'])
+  if (!res.ok) return null
+  const id = (res.stdout.match(/\b[0-9a-f]{32}\b/) || [])[0]
+  return id ?? null
+}
+
 // --- Patch wrangler.jsonc --------------------------------------------------
-function writeD1Id(id) {
+/** Replace `placeholder` with `replacement` in wrangler.jsonc, idempotently. */
+function writeConfigValue(label, placeholder, replacement) {
   const raw = readFileSync(wranglerConfigPath, 'utf8')
-  if (raw.includes(`"${id}"`)) {
-    process.stdout.write('  wrangler.jsonc already has the database_id\n')
+  if (raw.includes(replacement)) {
+    process.stdout.write(`  wrangler.jsonc already has the ${label}\n`)
     return
   }
-  if (!raw.includes(ID_PLACEHOLDER)) {
+  if (!raw.includes(placeholder)) {
     process.stdout.write(
-      `  wrangler.jsonc has a different database_id already — leaving it. ` +
-        `Set it to ${id} manually if that is wrong.\n`,
+      `  wrangler.jsonc has a different ${label} already — leaving it. ` +
+        `Expected to write: ${replacement}\n`,
     )
     return
   }
-  writeFileSync(wranglerConfigPath, raw.replace(ID_PLACEHOLDER, id))
-  process.stdout.write(`  wrote database_id into wrangler.jsonc\n`)
+  writeFileSync(wranglerConfigPath, raw.replace(placeholder, replacement))
+  process.stdout.write(`  wrote ${label} into wrangler.jsonc\n`)
 }
 
 // --- Migrations ------------------------------------------------------------
@@ -126,18 +175,32 @@ function applyMigrations() {
 // --- Run -------------------------------------------------------------------
 log('cf-mediashare provisioning')
 ensureBucket()
+setBucketCors()
 const d1Id = ensureD1()
-writeD1Id(d1Id)
+writeConfigValue('database_id', ID_PLACEHOLDER, d1Id)
+const accountId = findAccountId()
+if (accountId) {
+  log('Writing account id (CF_ACCOUNT_ID) into wrangler.jsonc')
+  writeConfigValue('CF_ACCOUNT_ID', '"CF_ACCOUNT_ID": ""', `"CF_ACCOUNT_ID": "${accountId}"`)
+} else {
+  log('⚠ Could not determine your account id — set vars.CF_ACCOUNT_ID in wrangler.jsonc manually')
+}
 applyMigrations()
 
 log('Done.')
 process.stdout.write(
   [
     'Next steps:',
-    '  1. Configure Cloudflare Access in the Zero Trust dashboard (see DEPLOY.md).',
-    '  2. Seed groups + members: copy scripts/setup/seed.example.sql → seed.sql, edit, then',
+    '  1. Configure Cloudflare Access in the Zero Trust dashboard (see DEPLOY.md) and set',
+    '     ACCESS_TEAM_DOMAIN + ACCESS_AUD in wrangler.jsonc.',
+    '  2. Create an R2 API token (Object Read & Write, scoped to this bucket) so uploads go',
+    '     directly to R2 instead of through the Worker:',
+    '       pnpm exec wrangler secret put R2_ACCESS_KEY_ID',
+    '       pnpm exec wrangler secret put R2_SECRET_ACCESS_KEY',
+    '     (Optional — without them, uploads proxy through the Worker.)',
+    '  3. Seed groups + members: copy scripts/setup/seed.example.sql → seed.sql, edit, then',
     '     wrangler d1 execute cf-mediashare-db --remote --file scripts/setup/seed.sql',
-    '  3. pnpm deploy',
+    '  4. pnpm deploy',
     '',
   ].join('\n'),
 )

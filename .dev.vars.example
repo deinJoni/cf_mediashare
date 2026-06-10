@@ -4,9 +4,16 @@
 
 # When set to "true", the Worker trusts a stubbed identity header instead of
 # verifying a real Cloudflare Access JWT — local dev only, never in production.
+# The email must exist in the local D1 (seed with `pnpm seed:local`).
 DEV_STUB_ACCESS="true"
-DEV_STUB_EMAIL="you@example.com"
+DEV_STUB_EMAIL="alice@example.com"
 
 # Cloudflare Access (Zero Trust) — fill these for real JWT verification.
 # ACCESS_TEAM_DOMAIN="your-team.cloudflareaccess.com"
 # ACCESS_AUD="<application-audience-tag-from-access>"
+
+# R2 API token for presigned direct-to-R2 uploads. Usually left unset locally —
+# without them, uploads automatically proxy through the local Worker into the
+# local (miniflare) R2, which is what you want in dev.
+# R2_ACCESS_KEY_ID=""
+# R2_SECRET_ACCESS_KEY=""
