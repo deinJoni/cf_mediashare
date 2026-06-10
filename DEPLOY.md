@@ -70,6 +70,52 @@ pnpm deploy
 
 Visit the Worker URL — Access should challenge you, and after signing in you'll land in your gallery.
 
+## Appendix: fully scripted deploys (CI or AI agents)
+
+Every step above is CLI- or API-driven, so the whole deployment can run unattended — in CI, or by handing this guide to a coding agent. The single manual prerequisite is a **bootstrap API token** ([dashboard → API tokens](https://dash.cloudflare.com/profile/api-tokens)) with account permissions: _Workers Scripts: Edit_, _Workers R2 Storage: Edit_, _D1: Edit_, _Access: Apps and Policies: Edit_, and — only if step 3 should be automated too — _Account API Tokens: Edit_.
+
+```bash
+export CLOUDFLARE_API_TOKEN=<bootstrap token>
+export CLOUDFLARE_ACCOUNT_ID=<account id>
+```
+
+Wrangler reads both [environment variables](https://developers.cloudflare.com/workers/wrangler/system-environment-variables/) automatically — `pnpm setup`, `pnpm deploy`, `wrangler d1 execute`, and `wrangler secret put` (which accepts the value on stdin) all work without `wrangler login`.
+
+**Step 2 (Access) via API** — create the app with an inline allow-list policy; the response carries the `aud` tag:
+
+```bash
+# team domain for ACCESS_TEAM_DOMAIN:
+curl -s "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/access/organizations" \
+  -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" # → result.auth_domain
+
+# the app; response → result.aud goes into ACCESS_AUD:
+curl -s -X POST "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/access/apps" \
+  -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json" \
+  --data '{
+    "type": "self_hosted",
+    "name": "cf-mediashare",
+    "domain": "<worker-name>.<subdomain>.workers.dev",
+    "policies": [{
+      "name": "members",
+      "decision": "allow",
+      "precedence": 1,
+      "include": [{ "email": { "email": "alice@example.com" } },
+                  { "email": { "email": "bob@example.com" } }]
+    }]
+  }'
+```
+
+**Step 3 (R2 credentials) via API** — [R2's S3 credentials are derived from an API token](https://developers.cloudflare.com/r2/api/tokens/): create a bucket-scoped token via `POST /accounts/{account_id}/tokens` (permission group _Workers R2 Storage Bucket Item Write_, scoped to `cf-mediashare-media`); then the S3 **access key id** is the token's `id` and the **secret access key** is the SHA-256 hex of the token's `value`:
+
+```bash
+printf '%s' "$TOKEN_ID"                                   | pnpm exec wrangler secret put R2_ACCESS_KEY_ID
+printf '%s' "$TOKEN_VALUE" | shasum -a 256 | cut -d' ' -f1 | pnpm exec wrangler secret put R2_SECRET_ACCESS_KEY
+```
+
+Finish with `pnpm deploy` (ships the Access vars) and verify with `curl https://<worker-url>/api/health`.
+
+> There is also a [Deploy to Cloudflare button](https://developers.cloudflare.com/workers/platform/deploy-buttons/) flow that auto-provisions D1/R2 from `wrangler.jsonc` for public repos — monorepo support is limited and untested here, and Access/R2 setup still applies afterwards. Experimental.
+
 ## Costs
 
 ~$5–7/month per deployment (Workers Paid). Can run ~$1.35/month on Workers Free if server-side bulk-zip and presence aren't used. See PRD §9.

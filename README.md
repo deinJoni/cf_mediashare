@@ -49,13 +49,49 @@ Local dev uses an Access **stub** (`DEV_STUB_ACCESS`) so you don't need Zero Tru
 
 ## Deploy to your account
 
+The full walkthrough with every dashboard click lives in [`DEPLOY.md`](./DEPLOY.md); this is the shape of it.
+
+**Prerequisites:** a Cloudflare account, Node 20+, pnpm 10+.
+
 ```bash
-wrangler login        # authenticate with your Cloudflare account
-pnpm setup            # R2 bucket + CORS + D1 + migrations; writes ids into wrangler.jsonc
-pnpm deploy           # build the web app + wrangler deploy
+# 1. Provision — R2 bucket + CORS, D1 + migrations; writes the ids into wrangler.jsonc
+wrangler login
+pnpm install && pnpm setup
+
+# 2. First deploy (gives you the <name>.<subdomain>.workers.dev URL)
+pnpm deploy
 ```
 
-Then configure Cloudflare Access in front of the deployment, add the R2 upload credentials, and seed your groups/members — the whole walkthrough is in [`DEPLOY.md`](./DEPLOY.md).
+Then three one-time configuration steps:
+
+3. **Gate it with Access** — in [Zero Trust](https://one.dash.cloudflare.com/): add a self-hosted application for your Worker URL, pick a login method (email one-time PIN needs no external keys), allow your members' emails. Copy the app's **AUD tag** and your **team domain** into `wrangler.jsonc` (`ACCESS_AUD`, `ACCESS_TEAM_DOMAIN`).
+4. **R2 credentials for direct uploads** — create an R2 API token (Object Read & Write, scoped to the bucket) and store it: `wrangler secret put R2_ACCESS_KEY_ID` / `wrangler secret put R2_SECRET_ACCESS_KEY`. (Optional — without it, uploads proxy through the Worker.)
+5. **Seed your groups & members** — edit a copy of `scripts/setup/seed.example.sql`, then `wrangler d1 execute cf-mediashare-db --remote --file <your-seed.sql>`.
+
+Finish with `pnpm deploy` again to ship the Access config. Total cost: ~$5/month on Workers Paid, or ~$1.35/month on the free tier.
+
+### Deploying with an AI agent
+
+Everything above is CLI- or API-driven, so a coding agent (Claude Code, Cursor, etc.) can run the whole deployment unattended. The only thing you must create by hand is one **bootstrap API token** ([dashboard → API tokens](https://dash.cloudflare.com/profile/api-tokens)) with these account permissions: _Workers Scripts: Edit_, _Workers R2 Storage: Edit_, _D1: Edit_, _Access: Apps and Policies: Edit_ — plus _Account API Tokens: Edit_ if the agent should also mint the R2 upload credentials.
+
+Hand the agent the token and this prompt:
+
+```bash
+export CLOUDFLARE_API_TOKEN=<bootstrap token>   # wrangler picks both up automatically —
+export CLOUDFLARE_ACCOUNT_ID=<account id>       # no interactive `wrangler login` needed
+# "Deploy this repo to my Cloudflare account following DEPLOY.md."
+```
+
+What the agent can do non-interactively:
+
+- `pnpm setup` and `pnpm deploy` — wrangler authenticates from the env vars.
+- **Access app via API**: `POST /accounts/{account_id}/access/apps` with `type: "self_hosted"`, `domain: "<worker>.workers.dev"`, and an inline policy allowing your member emails; the response carries the **AUD tag**, and `GET /accounts/{account_id}/access/organizations` returns the team domain — both go into `wrangler.jsonc`.
+- **R2 S3 credentials via API**: create a bucket-scoped token at `POST /accounts/{account_id}/tokens` — the S3 _access key id_ is the token's `id` and the _secret_ is the SHA-256 hex of the token value — then pipe them into `wrangler secret put`.
+- Seed members with `wrangler d1 execute … --remote --file seed.sql` and verify with `curl https://<worker-url>/api/health`.
+
+### Deploy to Cloudflare button
+
+Cloudflare's [Deploy buttons](https://developers.cloudflare.com/workers/platform/deploy-buttons/) (`https://deploy.workers.cloudflare.com/?url=<repo>`) can clone a public repo into your account and auto-provision the D1/R2 bindings straight from `wrangler.jsonc`. This repo keeps its wrangler config at the root specifically so that flow has a chance — but monorepo support is officially limited and we haven't certified it, and Access/R2-credentials setup still has to follow afterwards. Treat it as experimental; the wrangler path above is the supported one.
 
 ## Scripts
 
