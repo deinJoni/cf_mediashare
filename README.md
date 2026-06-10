@@ -2,13 +2,14 @@
 
 Self-hosted, **Cloudflare-native** photo & video sharing for small, trusted groups. Clone it, deploy it into **your own** Cloudflare account, invite your people. No central service, no shared backend.
 
-> Status: **v1 — working MVP.** Upload, browse, view, download, caption, delete — photos and videos, per-group, behind Cloudflare Access. Remaining work (bulk ZIP download, multipart >5 GiB uploads, admin UI) lands phase-by-phase per [`DEVELOPMENT.md`](./DEVELOPMENT.md). Product spec in [`PRD.md`](./PRD.md).
+> Status: **v1 — working MVP.** Upload, browse, view, download, caption, delete — photos and videos, per-group, behind Cloudflare Access, with an in-app **admin screen** for invites, groups, and assignments. Remaining work (bulk ZIP download, multipart >5 GiB uploads) lands phase-by-phase per [`DEVELOPMENT.md`](./DEVELOPMENT.md). Product spec in [`PRD.md`](./PRD.md).
 
 ## What you get
 
 - **Private groups** — members only see media in groups they belong to; enforcement lives in the Worker, in front of every byte served.
 - **Direct-to-R2 uploads** — the browser generates thumbnails/posters client-side and PUTs straight to R2 via presigned URLs; a 500 MB video never proxies through the Worker. (Without R2 API credentials, uploads transparently fall back to proxying — handy locally.)
 - **Fast gallery** — thumbnail grid with infinite scroll, lightbox at display size, original on demand, video seeking via HTTP range requests, immutable edge caching for derivatives.
+- **Admin screen** — operators invite/remove members, create groups, and assign people via a members × groups matrix; optionally syncs invites into the Cloudflare Access allow-list (see [`DEPLOY.md`](./DEPLOY.md)).
 - **Zero egress cost** — media lives in R2; ~$5/month total (or ~$1.35 on the Workers free tier).
 
 ## Architecture

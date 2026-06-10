@@ -52,15 +52,17 @@ pnpm exec wrangler secret put R2_SECRET_ACCESS_KEY
 
 This step is technically optional: without the secrets, uploads transparently fall back to proxying through the Worker (group-checked either way). Set them so large videos never transit the Worker.
 
-## 4. Seed groups & members
+## 4. Seed your first admin (then manage members in-app)
+
+You only need to seed enough to bootstrap **one admin** — after that, the in-app **Admin** screen handles invites, group assignment, and removals (see §6).
 
 ```bash
 cp scripts/setup/seed.example.sql scripts/setup/seed.sql
-# edit seed.sql: your groups, member emails, and is_admin = 1 for yourself (the operator)
+# edit seed.sql: at minimum, one group and yourself with is_admin = 1 (the operator)
 pnpm exec wrangler d1 execute cf-mediashare-db --remote --file scripts/setup/seed.sql
 ```
 
-Emails must match what members sign in to Access with (matching is case-insensitive). `is_admin = 1` users can delete/recaption anyone's media; everyone else manages only their own uploads.
+Emails must match what members sign in to Access with (matching is case-insensitive). `is_admin = 1` users can delete/recaption anyone's media **and** reach the Admin screen; everyone else manages only their own uploads.
 
 ## 5. Deploy
 
@@ -69,6 +71,29 @@ pnpm deploy
 ```
 
 Visit the Worker URL — Access should challenge you, and after signing in you'll land in your gallery.
+
+## 6. Manage members & groups (Admin UI)
+
+Once an admin is signed in, an **Admin** link appears in the top bar (admins only). It manages everything that used to need a seed edit:
+
+- **Invite / remove members**, toggle who's an admin.
+- **Create / rename / delete groups.** Deleting a group or a member also deletes the media scoped to them (rows **and** R2 blobs).
+- **Assign members to groups** via a members × groups checkbox matrix.
+
+The app's two membership layers stay distinct: D1 (which the Worker enforces on every request — the authoritative gate) and the **Cloudflare Access allow-list** (the outer gate that decides who can load the app at all). By default the Admin UI edits D1 only and reminds you to keep the Access policy in step by hand.
+
+### Optional: sync invites into Cloudflare Access automatically
+
+Give the Worker a Cloudflare API token and the Admin UI will push invites/removals into your Access policy's allow-list too — one place to invite, and a per-member badge flags anyone whose D1 membership and Access entry have drifted apart.
+
+1. Dashboard → **API tokens → Create token** with permission **Access: Apps and Policies: Edit** (account-scoped).
+2. Store it as a Worker secret:
+
+   ```bash
+   pnpm exec wrangler secret put CLOUDFLARE_API_TOKEN
+   ```
+
+The Worker finds your Access app by matching `ACCESS_AUD` and edits the first `allow` policy (the one `DEPLOY.md` provisions). If that app has **several** allow policies, pin the target by setting `ACCESS_APP_ID` / `ACCESS_POLICY_ID` in `wrangler.jsonc`. Sync only manages **individually-listed** emails — members allowed via a domain or "everyone" rule are left untouched. A sync failure never blocks the membership change (D1 is authoritative); the UI surfaces a warning so you can reconcile in the dashboard.
 
 ## Appendix: fully scripted deploys (CI or AI agents)
 

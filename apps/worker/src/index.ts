@@ -3,7 +3,9 @@ import type { HealthResponse } from '@cf-mediashare/shared'
 import type { AppBindings } from './env.js'
 import { apiError } from './lib/errors.js'
 import { accessMiddleware } from './middleware/access.js'
+import { adminMiddleware } from './middleware/admin.js'
 import { memberMiddleware } from './middleware/member.js'
+import { adminRoutes } from './routes/admin.js'
 import { mediaRoutes } from './routes/media.js'
 import { meRoutes } from './routes/me.js'
 import { uploadRoutes } from './routes/uploads.js'
@@ -24,9 +26,13 @@ app.get('/api/health', (c) => {
  */
 app.use('/api/*', accessMiddleware, memberMiddleware)
 
+/** Admin surface (F2) — gated to operators on top of the member gate above. */
+app.use('/api/admin/*', adminMiddleware)
+
 app.route('/api', meRoutes)
 app.route('/api', uploadRoutes)
 app.route('/api', mediaRoutes)
+app.route('/api', adminRoutes)
 
 /** Unknown API paths get the JSON error envelope, never the SPA fallback. */
 app.all('/api/*', (c) => c.json(apiError('not_found'), 404))

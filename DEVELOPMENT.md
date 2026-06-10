@@ -134,7 +134,7 @@ Milestone tags: **M1** = personal MVP, **M2** = OSS-ready, **M3** = optional lay
 - [ ] `README` + `DEPLOY.md` (clone → provision → configure Access → deploy)
 - [ ] Scripted, idempotent provisioning with config validation
 - [ ] Sensible default vars (size tiers, file types/limits)
-- [ ] Minimal admin UI for invites + group assignment (or documented seed flow)
+- [x] Admin UI for invites + group assignment (members/groups CRUD + membership matrix; optional Cloudflare Access allow-list sync)
 - [ ] `LICENSE` (MIT or Apache-2.0) + `CONTRIBUTING.md`
 
 **Accept:** a fresh Cloudflare account goes from clone to working deployment by following `DEPLOY.md` alone.

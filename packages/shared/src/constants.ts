@@ -28,6 +28,8 @@ export const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'
 
 export const MAX_CAPTION_LENGTH = 1000
 export const MAX_FILE_NAME_LENGTH = 255
+/** Group display name (admin UI, F2). */
+export const MAX_GROUP_NAME_LENGTH = 100
 
 /** Gallery pagination (F4). */
 export const LIST_DEFAULT_LIMIT = 50
