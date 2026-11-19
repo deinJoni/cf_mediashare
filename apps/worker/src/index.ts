@@ -27,6 +27,19 @@ app.get('/api/health', (c) => {
  */
 app.use('/api/*', accessMiddleware, memberMiddleware)
 
+/**
+ * API JSON is personalized by membership state — mark it uncacheable so no
+ * intermediary (browser, edge) can resurrect deleted rows or leak one member's
+ * data to another. Routes that already chose a policy (the media serve path's
+ * immutable derivative caching, the download's private TTL) keep theirs.
+ */
+app.use('/api/*', async (c, next) => {
+  await next()
+  if (!c.res.headers.has('cache-control')) {
+    c.res.headers.set('cache-control', 'private, no-store')
+  }
+})
+
 /** Admin surface (F2) — gated to operators on top of the member gate above. */
 app.use('/api/admin/*', adminMiddleware)
 

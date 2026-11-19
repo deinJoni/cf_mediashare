@@ -96,6 +96,9 @@ export function App() {
   // keeping the current group selected if it's still valid).
   const closeAdmin = useCallback(() => {
     setView('gallery')
+    // Admin ops can cascade media (group/member deletes) — drop every cached
+    // gallery so the next view refetches instead of showing dead rows.
+    setGalleries({})
     getMe()
       .then((me) => {
         setSession({ state: 'ready', me })
@@ -182,6 +185,26 @@ export function App() {
     setSelectedIds(new Set())
     setArchiveMenu(null)
     localStorage.setItem(GROUP_STORAGE_KEY, groupId)
+    // A previously-loaded group keeps stale items forever (deletes elsewhere,
+    // other tabs, admin cascades). Refresh its first page in the background —
+    // replace, don't append, so removed rows actually disappear.
+    const cached = galleries[groupId]
+    if (cached && cached.status !== 'idle' && cached.status !== 'loading') {
+      listMedia(groupId, {})
+        .then((page) => {
+          setGalleries((prev) => ({
+            ...prev,
+            [groupId]: {
+              items: page.items,
+              nextCursor: page.nextCursor,
+              status: 'ready',
+            },
+          }))
+        })
+        .catch(() => {
+          // Refresh is best-effort: keep showing the cached page on failure.
+        })
+    }
   }
 
   const toggleSelect = useCallback((id: string) => {
