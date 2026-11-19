@@ -35,13 +35,13 @@
   ],
 
   // Metadata DB: users, groups, memberships, media.
-  // `database_id` is created per-deployment — `pnpm setup` fills it in for you,
+  // `database_id` is created per-deployment — `pnpm run setup` fills it in for you,
   // or paste the id from `wrangler d1 create cf-mediashare-db`.
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "cf-mediashare-db",
-      "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID",
+      "database_id": "607b3e8b-a12b-47fe-9089-2efdd6abc451",
       "migrations_dir": "migrations",
     },
   ],
@@ -56,19 +56,19 @@
   //   Access allow-list; without it the admin UI manages D1 only (see DEPLOY.md).
   // Access values come from your Cloudflare Zero Trust dashboard.
   "vars": {
-    "ACCESS_TEAM_DOMAIN": "",
-    "ACCESS_AUD": "",
+    "ACCESS_TEAM_DOMAIN": "dawn-salad-ef78.cloudflareaccess.com",
+    "ACCESS_AUD": "1ddc824c9d88e0559d8cf05079ab7c58524d6b6df7e032786f76fcd163f129d7",
     "MAX_UPLOAD_BYTES": "5368709120",
     "ALLOWED_MIME_PREFIXES": "image/,video/",
     // Cloudflare account id — builds the R2 S3 endpoint for presigning.
-    // `pnpm setup` fills this in.
-    "CF_ACCOUNT_ID": "",
+    // `pnpm run setup` fills this in.
+    "CF_ACCOUNT_ID": "a728c0d62d9c1c95b360fb6c4746de27",
     // Must match r2_buckets[0].bucket_name above.
     "R2_BUCKET_NAME": "cf-mediashare-media",
     // Admin-UI Access sync (optional). Leave blank to auto-discover the Access
     // app by ACCESS_AUD and its first `allow` policy; pin these only if that
     // app has several allow policies or you'd rather skip discovery.
-    "ACCESS_APP_ID": "",
-    "ACCESS_POLICY_ID": "",
+    "ACCESS_APP_ID": "7209baba-f0bc-4076-9cc0-b06e0ba69724",
+    "ACCESS_POLICY_ID": "3d0c342e-4532-43b5-a867-682f85fa5fdc",
   },
 }

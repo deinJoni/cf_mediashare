@@ -36,9 +36,9 @@ wrangler.jsonc   # bindings & vars (no secrets committed)
 ## Local development
 
 - `pnpm install`
-- `pnpm setup` → provisions R2 + D1 in your Cloudflare account, runs migrations + seed
+- `pnpm run setup` → provisions R2 + D1 in your Cloudflare account, runs migrations + seed
 - `pnpm dev` → Turborepo runs web build + `wrangler dev` for the worker
-- `pnpm deploy` → single `wrangler deploy`
+- `pnpm run deploy` → single `wrangler deploy`
 
 Cloudflare Access is configured once in the dashboard (or via API) and documented in `DEPLOY.md`; local dev can stub the identity header.
 

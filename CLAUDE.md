@@ -19,4 +19,4 @@ Self-hosted, Cloudflare-native photo/video sharing for small trusted groups. OSS
 
 ## Commands
 
-`pnpm dev` (web watch + wrangler dev) · `pnpm build` · `pnpm typecheck` · `pnpm lint` · `pnpm setup` (provision R2+D1+CORS) · `pnpm deploy` · `pnpm migrate:local` + `pnpm seed:local` (local D1; seed pairs with `DEV_STUB_EMAIL=alice@example.com`).
+`pnpm dev` (web watch + wrangler dev) · `pnpm build` · `pnpm typecheck` · `pnpm lint` · `pnpm run setup` (provision R2+D1+CORS) · `pnpm run deploy` · `pnpm migrate:local` + `pnpm seed:local` (local D1; seed pairs with `DEV_STUB_EMAIL=alice@example.com`).

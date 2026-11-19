@@ -58,10 +58,10 @@ The full walkthrough with every dashboard click lives in [`DEPLOY.md`](./DEPLOY.
 ```bash
 # 1. Provision — R2 bucket + CORS, D1 + migrations; writes the ids into wrangler.jsonc
 wrangler login
-pnpm install && pnpm setup
+pnpm install && pnpm run setup
 
 # 2. First deploy (gives you the <name>.<subdomain>.workers.dev URL)
-pnpm deploy
+pnpm run deploy
 ```
 
 Then three one-time configuration steps:
@@ -70,7 +70,7 @@ Then three one-time configuration steps:
 4. **R2 credentials for direct uploads** — create an R2 API token (Object Read & Write, scoped to the bucket) and store it: `wrangler secret put R2_ACCESS_KEY_ID` / `wrangler secret put R2_SECRET_ACCESS_KEY`. (Optional — without it, uploads proxy through the Worker.)
 5. **Seed your groups & members** — edit a copy of `scripts/setup/seed.example.sql`, then `wrangler d1 execute cf-mediashare-db --remote --file <your-seed.sql>`.
 
-Finish with `pnpm deploy` again to ship the Access config. Total cost: ~$5/month on Workers Paid, or ~$1.35/month on the free tier.
+Finish with `pnpm run deploy` again to ship the Access config. Total cost: ~$5/month on Workers Paid, or ~$1.35/month on the free tier.
 
 ### Deploying with an AI agent
 
@@ -86,7 +86,7 @@ export CLOUDFLARE_ACCOUNT_ID=<account id>       # no interactive `wrangler login
 
 What the agent can do non-interactively:
 
-- `pnpm setup` and `pnpm deploy` — wrangler authenticates from the env vars.
+- `pnpm run setup` and `pnpm run deploy` — wrangler authenticates from the env vars.
 - **Access app via API**: `POST /accounts/{account_id}/access/apps` with `type: "self_hosted"`, `domain: "<worker>.workers.dev"`, and an inline policy allowing your member emails; the response carries the **AUD tag**, and `GET /accounts/{account_id}/access/organizations` returns the team domain — both go into `wrangler.jsonc`.
 - **R2 S3 credentials via API**: create a bucket-scoped token at `POST /accounts/{account_id}/tokens` — the S3 _access key id_ is the token's `id` and the _secret_ is the SHA-256 hex of the token value — then pipe them into `wrangler secret put`.
 - Seed members with `wrangler d1 execute … --remote --file seed.sql` and verify with `curl https://<worker-url>/api/health`.
@@ -104,9 +104,9 @@ Cloudflare's [Deploy buttons](https://developers.cloudflare.com/workers/platform
 | `pnpm typecheck`                         | Typecheck all packages                 |
 | `pnpm lint`                              | Lint all packages                      |
 | `pnpm format`                            | Prettier write                         |
-| `pnpm setup`                             | Provision R2 + CORS + D1 + migrations  |
+| `pnpm run setup`                             | Provision R2 + CORS + D1 + migrations  |
 | `pnpm migrate:local` / `pnpm seed:local` | Local D1 schema / example data         |
-| `pnpm deploy`                            | Build + `wrangler deploy`              |
+| `pnpm run deploy`                            | Build + `wrangler deploy`              |
 
 ## License
 

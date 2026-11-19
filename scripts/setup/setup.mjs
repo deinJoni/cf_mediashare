@@ -6,9 +6,9 @@
  * wrangler.jsonc, applies migrations, and sets the bucket CORS rules needed for
  * direct-to-R2 browser uploads. Idempotent: re-running skips what exists.
  *
- *   pnpm setup                          # provision + migrate (remote)
- *   pnpm setup --local                  # also migrate the local dev D1
- *   pnpm setup --origin https://x.dev   # restrict upload CORS to your app origin
+ *   pnpm run setup                          # provision + migrate (remote)
+ *   pnpm run setup --local                  # also migrate the local dev D1
+ *   pnpm run setup --origin https://x.dev   # restrict upload CORS to your app origin
  *
  * Requires: `wrangler login` (or CLOUDFLARE_API_TOKEN) beforehand.
  */
@@ -200,7 +200,7 @@ process.stdout.write(
     '     (Optional — without them, uploads proxy through the Worker.)',
     '  3. Seed groups + members: copy scripts/setup/seed.example.sql → seed.sql, edit, then',
     '     wrangler d1 execute cf-mediashare-db --remote --file scripts/setup/seed.sql',
-    '  4. pnpm deploy',
+    '  4. pnpm run deploy',
     '',
   ].join('\n'),
 )

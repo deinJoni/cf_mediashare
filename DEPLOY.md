@@ -12,7 +12,7 @@ Clone → working deployment in your own Cloudflare account. (Polished further i
 
 ```bash
 pnpm install
-pnpm setup
+pnpm run setup
 ```
 
 This creates the R2 bucket and D1 database, applies the bucket CORS rules needed for direct browser→R2 uploads, writes the D1 `database_id` and your `CF_ACCOUNT_ID` into `wrangler.jsonc`, and runs migrations. Idempotent — re-run it safely. Add `--local` to also migrate the local dev D1, or `--origin https://your-app.example.com` to pin upload CORS to your app origin instead of `*`.
@@ -67,7 +67,7 @@ Emails must match what members sign in to Access with (matching is case-insensit
 ## 5. Deploy
 
 ```bash
-pnpm deploy
+pnpm run deploy
 ```
 
 Visit the Worker URL — Access should challenge you, and after signing in you'll land in your gallery.
@@ -104,7 +104,7 @@ export CLOUDFLARE_API_TOKEN=<bootstrap token>
 export CLOUDFLARE_ACCOUNT_ID=<account id>
 ```
 
-Wrangler reads both [environment variables](https://developers.cloudflare.com/workers/wrangler/system-environment-variables/) automatically — `pnpm setup`, `pnpm deploy`, `wrangler d1 execute`, and `wrangler secret put` (which accepts the value on stdin) all work without `wrangler login`.
+Wrangler reads both [environment variables](https://developers.cloudflare.com/workers/wrangler/system-environment-variables/) automatically — `pnpm run setup`, `pnpm run deploy`, `wrangler d1 execute`, and `wrangler secret put` (which accepts the value on stdin) all work without `wrangler login`.
 
 **Step 2 (Access) via API** — create the app with an inline allow-list policy; the response carries the `aud` tag:
 
@@ -137,7 +137,7 @@ printf '%s' "$TOKEN_ID"                                   | pnpm exec wrangler s
 printf '%s' "$TOKEN_VALUE" | shasum -a 256 | cut -d' ' -f1 | pnpm exec wrangler secret put R2_SECRET_ACCESS_KEY
 ```
 
-Finish with `pnpm deploy` (ships the Access vars) and verify with `curl https://<worker-url>/api/health`.
+Finish with `pnpm run deploy` (ships the Access vars) and verify with `curl https://<worker-url>/api/health`.
 
 > There is also a [Deploy to Cloudflare button](https://developers.cloudflare.com/workers/platform/deploy-buttons/) flow that auto-provisions D1/R2 from `wrangler.jsonc` for public repos — monorepo support is limited and untested here, and Access/R2 setup still applies afterwards. Experimental.
 
