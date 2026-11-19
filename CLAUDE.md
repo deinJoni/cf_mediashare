@@ -4,7 +4,7 @@ Guidance for working in this repo. Product spec: `PRD.md`. Build plan & phases: 
 
 ## What this is
 
-Self-hosted, Cloudflare-native photo/video sharing for small trusted groups. OSS, clone-and-deploy into your own Cloudflare account. Currently at **v1 — working MVP** (Phases 0–3 complete, plus single-file download, delete, captions, metadata from Phases 4–5). Deferred: bulk ZIP download, multipart upload for >5 GiB files, admin UI (see `DEVELOPMENT.md`).
+Self-hosted, Cloudflare-native photo/video sharing for small trusted groups. OSS, clone-and-deploy into your own Cloudflare account. Currently at **v1 — working MVP** (Phases 0–3 complete, plus single-file download, delete, captions, metadata from Phases 4–5, and the Phase 6 admin UI: members/groups CRUD + membership matrix + optional Cloudflare Access allow-list sync). Deferred: bulk ZIP download, multipart upload for >5 GiB files (see `DEVELOPMENT.md`).
 
 ## Non-obvious conventions
 
@@ -13,6 +13,7 @@ Self-hosted, Cloudflare-native photo/video sharing for small trusted groups. OSS
 - **Access is the only gate.** All `/api/*` requests carry a verified Cloudflare Access JWT (`apps/worker/src/middleware/access.ts`, jose + team JWKS); per-group filtering is enforced explicitly in the Worker (D1 has no row-level security). Local dev uses a stub (`DEV_STUB_ACCESS` in `.dev.vars`); in stub mode an `X-Dev-Stub-Email` request header switches identity per-request for permission testing.
 - **Two upload modes, one contract.** `POST /api/uploads/presign` returns direct-to-R2 presigned PUTs when the `R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY` secrets + `CF_ACCOUNT_ID` are set; otherwise it falls back to same-origin `/api/upload-proxy/...` URLs through the Worker (always the case in local dev — miniflare R2 has no S3 endpoint). Clients treat the URLs as opaque.
 - **R2 keys never cross the wire.** The client only sees `/api/media/:id/:tier` serve URLs; keys live in D1 rows and `apps/worker/src/lib/keys.ts`.
+- **Admin surface: D1 is authoritative, Access sync is best-effort.** `/api/admin/*` is gated by `adminMiddleware` (`is_admin = 1`) on top of the member gate. Admin deletes cascade _explicitly_ via `db.batch()` (don't rely on D1 FK `ON DELETE CASCADE`) and purge R2 blobs first (`lib/r2.ts`). Inviting/removing also syncs the Cloudflare Access allow-list via the CF API (`lib/access-admin.ts`) **only** when `CLOUDFLARE_API_TOKEN` is set — that sync never throws into a route and never blocks the D1 change; it returns an `accessSync` status the UI surfaces.
 - **Every phase ships.** Keep PRs phase-scoped (see `DEVELOPMENT.md`); main stays demoable. No long-lived feature branches.
 - **No secrets committed.** Config is non-secret `vars` in `wrangler.jsonc`; secrets go via `wrangler secret put` / `.dev.vars` (gitignored).
 

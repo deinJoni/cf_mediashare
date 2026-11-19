@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Media, MeResponse } from '@cf-mediashare/shared'
 import { ApiClientError, deleteMedia, getMe, listMedia, updateMedia } from './api/client.js'
+import { AdminPanel } from './components/AdminPanel.js'
 import { Gallery } from './components/Gallery.js'
 import { Lightbox } from './components/Lightbox.js'
 import { ToastShelf, useToasts } from './components/Toasts.js'
@@ -28,6 +29,7 @@ export function App() {
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
   const [galleries, setGalleries] = useState<Record<string, GalleryState>>({})
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  const [view, setView] = useState<'gallery' | 'admin'>('gallery')
   const { toasts, pushToast, dismissToast } = useToasts()
   // Guards double-fetches: the observer sentinel and effects can fire together.
   const inFlight = useRef(new Set<string>())
@@ -54,6 +56,25 @@ export function App() {
   }, [])
 
   useEffect(loadSession, [loadSession])
+
+  // Leaving the admin screen: refresh identity so the topbar group tabs reflect
+  // any membership/group changes the operator made to their own account — but
+  // in place, without tearing the UI down to the full-screen loading state (and
+  // keeping the current group selected if it's still valid).
+  const closeAdmin = useCallback(() => {
+    setView('gallery')
+    getMe()
+      .then((me) => {
+        setSession({ state: 'ready', me })
+        setSelectedGroupId((current) =>
+          current && me.groups.some((g) => g.id === current) ? current : (me.groups[0]?.id ?? null),
+        )
+      })
+      .catch(() => {
+        // Couldn't refresh — fall back to the full reload (handles revoked access).
+        loadSession()
+      })
+  }, [loadSession])
 
   const loadMore = useCallback(
     (groupId: string) => {
@@ -207,6 +228,16 @@ export function App() {
   }
 
   const { me } = session
+
+  if (view === 'admin' && me.user.isAdmin) {
+    return (
+      <>
+        <AdminPanel currentUserId={me.user.id} onClose={closeAdmin} pushToast={pushToast} />
+        <ToastShelf toasts={toasts} onDismiss={dismissToast} />
+      </>
+    )
+  }
+
   const gallery =
     selectedGroupId !== null ? (galleries[selectedGroupId] ?? EMPTY_GALLERY) : EMPTY_GALLERY
 
@@ -241,6 +272,11 @@ export function App() {
                 }}
               />
             </label>
+          )}
+          {me.user.isAdmin && (
+            <button className="link-btn admin-link" onClick={() => setView('admin')}>
+              Admin
+            </button>
           )}
           <span className="user-email" title={me.user.email}>
             {me.user.email}

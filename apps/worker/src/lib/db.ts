@@ -188,3 +188,238 @@ export async function updateMediaCaption(
 export async function deleteMediaRow(db: D1Database, id: string): Promise<void> {
   await db.prepare('DELETE FROM media WHERE id = ?').bind(id).run()
 }
+
+// --- Admin (F2) -------------------------------------------------------------
+//
+// The admin surface reads the whole member/group list and mutates it. Deletes
+// here are written as EXPLICIT multi-table batches rather than leaning on the
+// schema's ON DELETE CASCADE: D1 does not reliably enforce foreign keys at
+// runtime, so cascading the dependent rows ourselves is the only guarantee
+// that removing a user/group leaves no dangling media or membership rows.
+
+/** `users` row with the columns the admin list needs (adds `created_at`). */
+export interface AdminUserRow {
+  id: string
+  email: string
+  is_admin: number
+  created_at: string
+}
+
+/** Just the three R2 keys of a media row — used to purge blobs before a cascade delete. */
+export interface MediaKeyRow {
+  r2_key_original: string
+  r2_key_display: string
+  r2_key_thumb: string
+}
+
+/** Flatten media key rows into a flat R2 key list for a batched bucket delete. */
+export function mediaKeysFromRows(rows: MediaKeyRow[]): string[] {
+  return rows.flatMap((r) => [r.r2_key_original, r.r2_key_display, r.r2_key_thumb])
+}
+
+export async function listAllUsers(db: D1Database): Promise<AdminUserRow[]> {
+  const { results } = await db
+    .prepare('SELECT id, email, is_admin, created_at FROM users ORDER BY created_at, email')
+    .all<AdminUserRow>()
+  return results
+}
+
+export async function listAllGroups(db: D1Database): Promise<Group[]> {
+  const { results } = await db.prepare('SELECT id, name FROM groups ORDER BY name').all<Group>()
+  return results
+}
+
+export async function listAllMemberships(
+  db: D1Database,
+): Promise<{ user_id: string; group_id: string }[]> {
+  const { results } = await db
+    .prepare('SELECT user_id, group_id FROM memberships')
+    .all<{ user_id: string; group_id: string }>()
+  return results
+}
+
+/** media counts keyed by group id (groups absent from the map have zero). */
+export async function mediaCountsByGroup(db: D1Database): Promise<Map<string, number>> {
+  const { results } = await db
+    .prepare('SELECT group_id, COUNT(*) AS c FROM media GROUP BY group_id')
+    .all<{ group_id: string; c: number }>()
+  return new Map(results.map((r) => [r.group_id, r.c]))
+}
+
+/** media counts keyed by uploader id. */
+export async function mediaCountsByUploader(db: D1Database): Promise<Map<string, number>> {
+  const { results } = await db
+    .prepare('SELECT uploader_id, COUNT(*) AS c FROM media GROUP BY uploader_id')
+    .all<{ uploader_id: string; c: number }>()
+  return new Map(results.map((r) => [r.uploader_id, r.c]))
+}
+
+/**
+ * Demote a member to non-admin, but never the last admin. The count re-check
+ * lives *inside* the UPDATE's WHERE so the read and the write can't interleave
+ * with a concurrent demote/delete (D1 serializes a single statement); a separate
+ * `SELECT COUNT` then `UPDATE` would let two simultaneous demotes both pass and
+ * reach zero admins. Returns false (nothing changed) only when the target is the
+ * sole remaining admin — demoting an already-non-admin member is a no-op success.
+ */
+export async function demoteAdminIfNotLast(db: D1Database, id: string): Promise<boolean> {
+  const res = await db
+    .prepare(
+      `UPDATE users SET is_admin = 0
+       WHERE id = ? AND (is_admin = 0 OR (SELECT COUNT(*) FROM users WHERE is_admin = 1) > 1)`,
+    )
+    .bind(id)
+    .run()
+  return (res.meta.changes ?? 0) > 0
+}
+
+/** Media uploaded by one member — for the AdminUser response after a mutation. */
+export async function countMediaByUploader(db: D1Database, userId: string): Promise<number> {
+  const row = await db
+    .prepare('SELECT COUNT(*) AS c FROM media WHERE uploader_id = ?')
+    .bind(userId)
+    .first<{ c: number }>()
+  return row?.c ?? 0
+}
+
+/** Members assigned to one group — for the AdminGroup response after a mutation. */
+export async function countGroupMembers(db: D1Database, groupId: string): Promise<number> {
+  const row = await db
+    .prepare('SELECT COUNT(*) AS c FROM memberships WHERE group_id = ?')
+    .bind(groupId)
+    .first<{ c: number }>()
+  return row?.c ?? 0
+}
+
+/** Media in one group — for the AdminGroup response after a mutation. */
+export async function countGroupMedia(db: D1Database, groupId: string): Promise<number> {
+  const row = await db
+    .prepare('SELECT COUNT(*) AS c FROM media WHERE group_id = ?')
+    .bind(groupId)
+    .first<{ c: number }>()
+  return row?.c ?? 0
+}
+
+export async function getUserById(db: D1Database, id: string): Promise<AdminUserRow | null> {
+  return db
+    .prepare('SELECT id, email, is_admin, created_at FROM users WHERE id = ?')
+    .bind(id)
+    .first<AdminUserRow>()
+}
+
+export async function createUser(
+  db: D1Database,
+  p: { id: string; email: string; isAdmin: boolean },
+): Promise<void> {
+  await db
+    .prepare('INSERT INTO users (id, email, is_admin) VALUES (?, ?, ?)')
+    .bind(p.id, p.email, p.isAdmin ? 1 : 0)
+    .run()
+}
+
+export async function setUserAdmin(db: D1Database, id: string, isAdmin: boolean): Promise<void> {
+  await db
+    .prepare('UPDATE users SET is_admin = ? WHERE id = ?')
+    .bind(isAdmin ? 1 : 0, id)
+    .run()
+}
+
+export async function listMediaKeysByUploader(
+  db: D1Database,
+  userId: string,
+): Promise<MediaKeyRow[]> {
+  const { results } = await db
+    .prepare(
+      'SELECT r2_key_original, r2_key_display, r2_key_thumb FROM media WHERE uploader_id = ?',
+    )
+    .bind(userId)
+    .all<MediaKeyRow>()
+  return results
+}
+
+export async function listMediaKeysByGroup(
+  db: D1Database,
+  groupId: string,
+): Promise<MediaKeyRow[]> {
+  const { results } = await db
+    .prepare('SELECT r2_key_original, r2_key_display, r2_key_thumb FROM media WHERE group_id = ?')
+    .bind(groupId)
+    .all<MediaKeyRow>()
+  return results
+}
+
+/**
+ * Remove a member and everything that hangs off them — their uploaded media
+ * rows and all their memberships — but never the last admin. The user-row delete
+ * is conditional (same in-statement count re-check as {@link demoteAdminIfNotLast})
+ * so two concurrent deletes can't both pass and reach zero admins; only if it
+ * actually removed the row do we cascade the dependents. Returns false (nothing
+ * deleted) when the target is the sole remaining admin.
+ *
+ * The user row goes first on purpose: once it's gone, `memberMiddleware` 403s
+ * that identity, so a racing upload can't finalize a new row mid-cascade. Caller
+ * snapshots {@link listMediaKeysByUploader} BEFORE this and purges R2 after.
+ */
+export async function deleteUserIfNotLastAdmin(db: D1Database, id: string): Promise<boolean> {
+  const res = await db
+    .prepare(
+      `DELETE FROM users
+       WHERE id = ? AND (is_admin = 0 OR (SELECT COUNT(*) FROM users WHERE is_admin = 1) > 1)`,
+    )
+    .bind(id)
+    .run()
+  if ((res.meta.changes ?? 0) === 0) return false
+  await db.batch([
+    db.prepare('DELETE FROM media WHERE uploader_id = ?').bind(id),
+    db.prepare('DELETE FROM memberships WHERE user_id = ?').bind(id),
+  ])
+  return true
+}
+
+export async function getGroupById(db: D1Database, id: string): Promise<Group | null> {
+  return db.prepare('SELECT id, name FROM groups WHERE id = ?').bind(id).first<Group>()
+}
+
+export async function createGroup(db: D1Database, p: { id: string; name: string }): Promise<void> {
+  await db.prepare('INSERT INTO groups (id, name) VALUES (?, ?)').bind(p.id, p.name).run()
+}
+
+export async function renameGroup(db: D1Database, id: string, name: string): Promise<void> {
+  await db.prepare('UPDATE groups SET name = ? WHERE id = ?').bind(name, id).run()
+}
+
+/**
+ * Delete a group and everything scoped to it — all its media rows and all its
+ * memberships — atomically. Call after the group's blobs (listMediaKeysByGroup)
+ * have been removed from R2.
+ */
+export async function deleteGroupCascade(db: D1Database, id: string): Promise<void> {
+  await db.batch([
+    db.prepare('DELETE FROM media WHERE group_id = ?').bind(id),
+    db.prepare('DELETE FROM memberships WHERE group_id = ?').bind(id),
+    db.prepare('DELETE FROM groups WHERE id = ?').bind(id),
+  ])
+}
+
+/** Idempotent: assigning an already-assigned member is a no-op. */
+export async function addMembership(
+  db: D1Database,
+  userId: string,
+  groupId: string,
+): Promise<void> {
+  await db
+    .prepare('INSERT OR IGNORE INTO memberships (user_id, group_id) VALUES (?, ?)')
+    .bind(userId, groupId)
+    .run()
+}
+
+export async function removeMembership(
+  db: D1Database,
+  userId: string,
+  groupId: string,
+): Promise<void> {
+  await db
+    .prepare('DELETE FROM memberships WHERE user_id = ? AND group_id = ?')
+    .bind(userId, groupId)
+    .run()
+}

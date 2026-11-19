@@ -20,6 +20,17 @@
  *   GET    /media/:id/download         → bytes, attachment     (F6)
  *   PATCH  /media/:id                  → Media                 (F7 caption)
  *   DELETE /media/:id                  → OkResponse            (F7)
+ *
+ *   Admin (F2) — all under /api/admin, gated to `isAdmin` members:
+ *   GET    /admin/overview                   → AdminOverviewResponse
+ *   POST   /admin/users                      → CreateUserResponse   (invite)
+ *   PATCH  /admin/users/:id                  → AdminUser            (toggle admin)
+ *   DELETE /admin/users/:id                  → DeleteUserResponse   (remove member)
+ *   PUT    /admin/users/:id/groups/:groupId  → OkResponse           (assign)
+ *   DELETE /admin/users/:id/groups/:groupId  → OkResponse           (unassign)
+ *   POST   /admin/groups                     → AdminGroup           (create)
+ *   PATCH  /admin/groups/:id                 → AdminGroup           (rename)
+ *   DELETE /admin/groups/:id                 → OkResponse           (delete)
  */
 import { z } from 'zod'
 import type { Media } from './types.js'
@@ -29,6 +40,7 @@ import {
   LIST_MAX_LIMIT,
   MAX_CAPTION_LENGTH,
   MAX_FILE_NAME_LENGTH,
+  MAX_GROUP_NAME_LENGTH,
 } from './constants.js'
 
 /** Standard error envelope returned by every failing endpoint. */
@@ -189,3 +201,113 @@ export const UpdateMediaRequestSchema = z.object({
 })
 export type UpdateMediaRequest = z.infer<typeof UpdateMediaRequestSchema>
 // → responds with MediaSchema
+
+// --- Admin (F2) — invites + group assignment, `isAdmin` members only ---------
+
+/**
+ * Outcome of a Cloudflare Access allow-list sync attempt (invite/remove also
+ * push the email to the Access policy when an API token is configured):
+ * - `synced`   — the Access policy was updated (or already in the wanted state).
+ * - `skipped`  — sync is configured but the change was a no-op there (e.g.
+ *                removing an email that's allowed via a domain/everyone rule,
+ *                not an individual entry).
+ * - `disabled` — no Access API token configured; D1 is the only gate touched.
+ * - `failed`   — the Access API call errored; D1 was still updated (it is the
+ *                authoritative gate). The operator should reconcile by hand.
+ */
+export const AccessSyncStatusSchema = z.enum(['synced', 'skipped', 'disabled', 'failed'])
+export type AccessSyncStatus = z.infer<typeof AccessSyncStatusSchema>
+
+export const AdminGroupSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  /** Members assigned to this group. */
+  memberCount: z.number().int().nonnegative(),
+  /** Media items in this group (deleting the group deletes them all). */
+  mediaCount: z.number().int().nonnegative(),
+})
+export type AdminGroup = z.infer<typeof AdminGroupSchema>
+
+export const AdminUserSchema = z.object({
+  id: z.string(),
+  email: z.string().email(),
+  isAdmin: z.boolean(),
+  createdAt: z.string(),
+  /** Groups this member belongs to. */
+  groupIds: z.array(z.string()),
+  /** Media this member has uploaded (deleting the member deletes them all). */
+  mediaCount: z.number().int().nonnegative(),
+  /**
+   * Whether this member's email is in the Cloudflare Access allow-list — lets
+   * the operator spot drift between D1 membership and the org gate. `null` when
+   * Access sync is not configured (the allow-list can't be read).
+   */
+  inAccessList: z.boolean().nullable(),
+})
+export type AdminUser = z.infer<typeof AdminUserSchema>
+
+/** Deployment-wide Access integration status, surfaced so the UI can guide the operator. */
+export const AdminAccessStatusSchema = z.object({
+  /** True when an API token + account/app config let the Worker edit the Access policy. */
+  syncEnabled: z.boolean(),
+  /** True when the allow-list could actually be read this request (drives `inAccessList`). */
+  listAvailable: z.boolean(),
+  /** Human-readable note when sync is off or the allow-list couldn't be read. */
+  message: z.string().optional(),
+})
+export type AdminAccessStatus = z.infer<typeof AdminAccessStatusSchema>
+
+/** `GET /api/admin/overview` — everything the admin screen renders in one round-trip. */
+export const AdminOverviewResponseSchema = z.object({
+  users: z.array(AdminUserSchema),
+  groups: z.array(AdminGroupSchema),
+  access: AdminAccessStatusSchema,
+})
+export type AdminOverviewResponse = z.infer<typeof AdminOverviewResponseSchema>
+
+/**
+ * `POST /api/admin/users` — invite a member (and optionally assign groups).
+ * Email is trimmed + lowercased *before* validation so a pasted address with
+ * stray spaces or mixed case is accepted and stored in the canonical form the
+ * Access middleware compares against (it lowercases the JWT email).
+ */
+export const CreateUserRequestSchema = z.object({
+  email: z.string().trim().toLowerCase().email(),
+  isAdmin: z.boolean().optional(),
+  groupIds: z.array(z.string()).optional(),
+})
+export type CreateUserRequest = z.infer<typeof CreateUserRequestSchema>
+
+export const CreateUserResponseSchema = z.object({
+  user: AdminUserSchema,
+  accessSync: AccessSyncStatusSchema,
+  /** Context when accessSync is `skipped`/`failed`/`disabled`. */
+  accessMessage: z.string().optional(),
+})
+export type CreateUserResponse = z.infer<typeof CreateUserResponseSchema>
+
+/** `PATCH /api/admin/users/:id` — promote/demote an admin. → AdminUser */
+export const UpdateUserRequestSchema = z.object({
+  isAdmin: z.boolean(),
+})
+export type UpdateUserRequest = z.infer<typeof UpdateUserRequestSchema>
+
+/** `DELETE /api/admin/users/:id` — remove a member (cascades their media + memberships). */
+export const DeleteUserResponseSchema = z.object({
+  ok: z.literal(true),
+  accessSync: AccessSyncStatusSchema,
+  accessMessage: z.string().optional(),
+})
+export type DeleteUserResponse = z.infer<typeof DeleteUserResponseSchema>
+
+/** `POST /api/admin/groups` — create a group. → AdminGroup */
+export const CreateGroupRequestSchema = z.object({
+  name: z.string().trim().min(1).max(MAX_GROUP_NAME_LENGTH),
+})
+export type CreateGroupRequest = z.infer<typeof CreateGroupRequestSchema>
+
+/** `PATCH /api/admin/groups/:id` — rename a group. → AdminGroup */
+export const UpdateGroupRequestSchema = z.object({
+  name: z.string().trim().min(1).max(MAX_GROUP_NAME_LENGTH),
+})
+export type UpdateGroupRequest = z.infer<typeof UpdateGroupRequestSchema>

@@ -5,15 +5,27 @@
  * instead of as a confusing render bug deeper in the tree.
  */
 import {
+  AdminGroupSchema,
+  AdminOverviewResponseSchema,
+  AdminUserSchema,
   ApiErrorSchema,
+  CreateUserResponseSchema,
+  DeleteUserResponseSchema,
   HealthResponseSchema,
   ListMediaResponseSchema,
   MediaSchema,
   MeResponseSchema,
   OkResponseSchema,
   PresignUploadResponseSchema,
+  type AdminGroup,
+  type AdminOverviewResponse,
+  type AdminUser,
   type ApiError,
+  type CreateGroupRequest,
   type CreateMediaRequest,
+  type CreateUserRequest,
+  type CreateUserResponse,
+  type DeleteUserResponse,
   type HealthResponse,
   type ListMediaResponse,
   type Media,
@@ -21,7 +33,9 @@ import {
   type OkResponse,
   type PresignUploadRequest,
   type PresignUploadResponse,
+  type UpdateGroupRequest,
   type UpdateMediaRequest,
+  type UpdateUserRequest,
   type UploadTarget,
 } from '@cf-mediashare/shared'
 
@@ -114,6 +128,73 @@ export function updateMedia(id: string, req: UpdateMediaRequest): Promise<Media>
 /** `DELETE /api/media/:id` — remove row + all R2 objects (F7). */
 export function deleteMedia(id: string): Promise<OkResponse> {
   return request(`/api/media/${encodeURIComponent(id)}`, OkResponseSchema, { method: 'DELETE' })
+}
+
+// --- Admin (F2) — operators only; the worker enforces it (403 otherwise) -----
+
+/** `GET /api/admin/overview` — members, groups, and Access sync status. */
+export function getAdminOverview(): Promise<AdminOverviewResponse> {
+  return request('/api/admin/overview', AdminOverviewResponseSchema)
+}
+
+/** `POST /api/admin/users` — invite a member (and optionally assign groups). */
+export function inviteUser(req: CreateUserRequest): Promise<CreateUserResponse> {
+  return request('/api/admin/users', CreateUserResponseSchema, jsonInit('POST', req))
+}
+
+/** `PATCH /api/admin/users/:id` — promote/demote an admin. */
+export function updateUser(id: string, req: UpdateUserRequest): Promise<AdminUser> {
+  return request(
+    `/api/admin/users/${encodeURIComponent(id)}`,
+    AdminUserSchema,
+    jsonInit('PATCH', req),
+  )
+}
+
+/** `DELETE /api/admin/users/:id` — remove a member (cascades their media). */
+export function deleteUser(id: string): Promise<DeleteUserResponse> {
+  return request(`/api/admin/users/${encodeURIComponent(id)}`, DeleteUserResponseSchema, {
+    method: 'DELETE',
+  })
+}
+
+/** `PUT /api/admin/users/:id/groups/:groupId` — assign a member to a group. */
+export function assignGroup(userId: string, groupId: string): Promise<OkResponse> {
+  return request(
+    `/api/admin/users/${encodeURIComponent(userId)}/groups/${encodeURIComponent(groupId)}`,
+    OkResponseSchema,
+    { method: 'PUT' },
+  )
+}
+
+/** `DELETE /api/admin/users/:id/groups/:groupId` — unassign a member from a group. */
+export function unassignGroup(userId: string, groupId: string): Promise<OkResponse> {
+  return request(
+    `/api/admin/users/${encodeURIComponent(userId)}/groups/${encodeURIComponent(groupId)}`,
+    OkResponseSchema,
+    { method: 'DELETE' },
+  )
+}
+
+/** `POST /api/admin/groups` — create a group. */
+export function createGroup(req: CreateGroupRequest): Promise<AdminGroup> {
+  return request('/api/admin/groups', AdminGroupSchema, jsonInit('POST', req))
+}
+
+/** `PATCH /api/admin/groups/:id` — rename a group. */
+export function renameGroup(id: string, req: UpdateGroupRequest): Promise<AdminGroup> {
+  return request(
+    `/api/admin/groups/${encodeURIComponent(id)}`,
+    AdminGroupSchema,
+    jsonInit('PATCH', req),
+  )
+}
+
+/** `DELETE /api/admin/groups/:id` — delete a group and all its media. */
+export function deleteGroup(id: string): Promise<OkResponse> {
+  return request(`/api/admin/groups/${encodeURIComponent(id)}`, OkResponseSchema, {
+    method: 'DELETE',
+  })
 }
 
 /**

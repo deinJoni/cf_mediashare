@@ -22,6 +22,14 @@ export interface Env {
   CF_ACCOUNT_ID: string
   /** Must match the `bucket_name` of the MEDIA_BUCKET binding. */
   R2_BUCKET_NAME: string
+  /**
+   * Cloudflare Access application + policy ids the admin UI syncs invites into
+   * (F2). Both optional: when blank, the app is discovered by matching
+   * `ACCESS_AUD`, and the first `allow` policy is used. Pin them to skip
+   * discovery / disambiguate when an app has several allow policies.
+   */
+  ACCESS_APP_ID?: string
+  ACCESS_POLICY_ID?: string
 
   // --- Secrets (`wrangler secret put` / .dev.vars) ---
   /**
@@ -31,6 +39,13 @@ export interface Env {
    */
   R2_ACCESS_KEY_ID?: string
   R2_SECRET_ACCESS_KEY?: string
+  /**
+   * Cloudflare API token with `Access: Apps and Policies: Edit` (F2). Optional:
+   * when set, the admin UI pushes invites/removals into the Access allow-list;
+   * when absent, the admin UI manages D1 only and tells the operator to update
+   * the Access policy by hand (always the case in local dev).
+   */
+  CLOUDFLARE_API_TOKEN?: string
 
   // --- Local dev stubs (.dev.vars; never set in production) ---
   DEV_STUB_ACCESS?: string

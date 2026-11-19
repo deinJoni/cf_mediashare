@@ -17,3 +17,8 @@ DEV_STUB_EMAIL="alice@example.com"
 # local (miniflare) R2, which is what you want in dev.
 # R2_ACCESS_KEY_ID=""
 # R2_SECRET_ACCESS_KEY=""
+
+# Cloudflare API token (Access: Apps and Policies: Edit) for the admin UI to sync
+# invites/removals into your Access allow-list. Usually left unset locally —
+# without it the admin UI manages the local D1 only (no real Access in dev).
+# CLOUDFLARE_API_TOKEN=""

@@ -45,6 +45,9 @@
   //   direct-to-R2 upload URLs. Optional: without them, uploads fall back to
   //   proxying through the Worker (fine for dev; set them for production so big
   //   videos never proxy through the Worker).
+  //   CLOUDFLARE_API_TOKEN — Cloudflare API token with `Access: Apps and Policies:
+  //   Edit`. Optional: when set, the admin UI syncs invites/removals into your
+  //   Access allow-list; without it the admin UI manages D1 only (see DEPLOY.md).
   // Access values come from your Cloudflare Zero Trust dashboard.
   "vars": {
     "ACCESS_TEAM_DOMAIN": "",
@@ -56,5 +59,10 @@
     "CF_ACCOUNT_ID": "",
     // Must match r2_buckets[0].bucket_name above.
     "R2_BUCKET_NAME": "cf-mediashare-media",
+    // Admin-UI Access sync (optional). Leave blank to auto-discover the Access
+    // app by ACCESS_AUD and its first `allow` policy; pin these only if that
+    // app has several allow policies or you'd rather skip discovery.
+    "ACCESS_APP_ID": "",
+    "ACCESS_POLICY_ID": "",
   },
 }
