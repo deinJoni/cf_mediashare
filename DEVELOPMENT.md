@@ -107,9 +107,9 @@ Milestone tags: **M1** = personal MVP, **M2** = OSS-ready, **M3** = optional lay
 **Depends on:** Phase 3.
 
 - [x] Single-file download (`Content-Disposition: attachment`)
-- [ ] Desktop bulk: client-side streaming ZIP (File System Access API)
-- [ ] Mobile bulk: Worker-generated streaming ZIP (store mode) → single URL for the OS download manager
-- [ ] Bound archives into chunks for resumability
+- [x] Desktop bulk: client-side streaming ZIP (File System Access API)
+- [x] Mobile bulk: Worker-generated streaming ZIP (store mode) → single URL for the OS download manager
+- [x] Bound archives into chunks for resumability
 
 **Accept:** bulk download incurs no egress charge and does not exhaust Worker memory; mobile download lands in the OS download manager.
 

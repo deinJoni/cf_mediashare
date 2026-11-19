@@ -4,7 +4,7 @@ Guidance for working in this repo. Product spec: `PRD.md`. Build plan & phases: 
 
 ## What this is
 
-Self-hosted, Cloudflare-native photo/video sharing for small trusted groups. OSS, clone-and-deploy into your own Cloudflare account. Currently at **v1 — working MVP** (Phases 0–3 complete, plus single-file download, delete, captions, metadata from Phases 4–5, and the Phase 6 admin UI: members/groups CRUD + membership matrix + optional Cloudflare Access allow-list sync). Deferred: bulk ZIP download, multipart upload for >5 GiB files (see `DEVELOPMENT.md`).
+Self-hosted, Cloudflare-native photo/video sharing for small trusted groups. OSS, clone-and-deploy into your own Cloudflare account. Currently at **v1 — working MVP** (Phases 0–3 complete, plus all of Phase 4 download incl. bulk ZIP, delete, captions, metadata from Phase 5, and the Phase 6 admin UI: members/groups CRUD + membership matrix + optional Cloudflare Access allow-list sync). Deferred: multipart upload for >5 GiB files (see `DEVELOPMENT.md`).
 
 ## Non-obvious conventions
 

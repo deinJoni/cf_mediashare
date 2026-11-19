@@ -9,6 +9,7 @@ import {
   AdminOverviewResponseSchema,
   AdminUserSchema,
   ApiErrorSchema,
+  ArchiveInfoResponseSchema,
   CreateUserResponseSchema,
   DeleteUserResponseSchema,
   HealthResponseSchema,
@@ -21,6 +22,7 @@ import {
   type AdminOverviewResponse,
   type AdminUser,
   type ApiError,
+  type ArchiveInfoResponse,
   type CreateGroupRequest,
   type CreateMediaRequest,
   type CreateUserRequest,
@@ -113,6 +115,14 @@ export function listMedia(
 /** `POST /api/uploads/presign` — allocate a media id + upload targets (F3). */
 export function presignUpload(req: PresignUploadRequest): Promise<PresignUploadResponse> {
   return request('/api/uploads/presign', PresignUploadResponseSchema, jsonInit('POST', req))
+}
+
+/** `GET /api/groups/:groupId/archive/info` — the bounded-part download plan (F6). */
+export function getArchiveInfo(groupId: string): Promise<ArchiveInfoResponse> {
+  return request(
+    `/api/groups/${encodeURIComponent(groupId)}/archive/info`,
+    ArchiveInfoResponseSchema,
+  )
 }
 
 /** `POST /api/media` — finalize after all three PUTs succeeded (F3). */

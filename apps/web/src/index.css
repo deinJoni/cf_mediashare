@@ -252,6 +252,124 @@ button {
   font-size: 0.75rem;
 }
 
+/* --- Bulk download (F6) ------------------------------------------------------ */
+
+.ghost-btn {
+  padding: 0.35rem 0.7rem;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  color: var(--fg);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ghost-btn:hover {
+  border-color: var(--accent);
+}
+
+.ghost-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.selection-bar {
+  position: sticky;
+  top: var(--topbar-h);
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 0.9rem;
+  background: color-mix(in srgb, var(--card) 92%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+
+.selection-count {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.tile.selected {
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
+}
+
+.tile-check {
+  position: absolute;
+  top: 0.35rem;
+  left: 0.35rem;
+  width: 1.4rem;
+  height: 1.4rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.65);
+  border: 1.5px solid rgba(255, 255, 255, 0.55);
+  font-size: 0.85rem;
+  color: var(--fg);
+}
+
+.tile.selected .tile-check {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #1a1304;
+  font-weight: 700;
+}
+
+.download-all-wrap {
+  position: relative;
+}
+
+.download-menu {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  z-index: var(--z-panel);
+  min-width: 20rem;
+  padding: 0.75rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+}
+
+.download-menu-head {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.download-part {
+  display: block;
+  padding: 0.45rem 0.5rem;
+  border-radius: 0.4rem;
+  color: var(--fg);
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.download-part:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.download-menu > .link-btn {
+  display: block;
+  margin: 0.4rem 0.5rem 0;
+  font-size: 0.85rem;
+}
+
+.zip-progress {
+  padding: 0.2rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 .gallery-status {
   text-align: center;
   padding: 1.5rem 0;

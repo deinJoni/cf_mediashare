@@ -189,6 +189,56 @@ export async function deleteMediaRow(db: D1Database, id: string): Promise<void> 
   await db.prepare('DELETE FROM media WHERE id = ?').bind(id).run()
 }
 
+// --- Bulk archive (F6) -------------------------------------------------------
+
+/** The five columns the archive endpoints need — no join, no derived keys. */
+export interface ArchiveMediaRow {
+  id: string
+  file_name: string
+  size_bytes: number
+  r2_key_original: string
+  created_at: string
+}
+
+const ARCHIVE_SELECT =
+  'SELECT id, file_name, size_bytes, r2_key_original, created_at FROM media'
+
+/**
+ * All of a group's media for archive planning/streaming, in the gallery's
+ * (created_at DESC, id DESC) order so parts are deterministic and match what
+ * the member just browsed.
+ */
+export async function listGroupMediaForArchive(
+  db: D1Database,
+  groupId: string,
+): Promise<ArchiveMediaRow[]> {
+  const { results } = await db
+    .prepare(`${ARCHIVE_SELECT} WHERE group_id = ? ORDER BY created_at DESC, id DESC`)
+    .bind(groupId)
+    .all<ArchiveMediaRow>()
+  return results
+}
+
+/**
+ * A bounded selection of a group's media (the `?ids=` archive variant).
+ * `ids` is capped by the route at ARCHIVE_MAX_SELECTION_IDS so the generated
+ * `IN (...)` stays inside D1's bound-parameter limit.
+ */
+export async function listGroupMediaByIds(
+  db: D1Database,
+  groupId: string,
+  ids: string[],
+): Promise<ArchiveMediaRow[]> {
+  const placeholders = ids.map(() => '?').join(',')
+  const { results } = await db
+    .prepare(
+      `${ARCHIVE_SELECT} WHERE group_id = ? AND id IN (${placeholders}) ORDER BY created_at DESC, id DESC`,
+    )
+    .bind(groupId, ...ids)
+    .all<ArchiveMediaRow>()
+  return results
+}
+
 // --- Admin (F2) -------------------------------------------------------------
 //
 // The admin surface reads the whole member/group list and mutates it. Deletes
