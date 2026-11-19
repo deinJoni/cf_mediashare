@@ -58,7 +58,7 @@
   "vars": {
     "ACCESS_TEAM_DOMAIN": "",
     "ACCESS_AUD": "",
-    "MAX_UPLOAD_BYTES": "1073741824",
+    "MAX_UPLOAD_BYTES": "5368709120",
     "ALLOWED_MIME_PREFIXES": "image/,video/",
     // Cloudflare account id — builds the R2 S3 endpoint for presigning.
     // `pnpm setup` fills this in.
