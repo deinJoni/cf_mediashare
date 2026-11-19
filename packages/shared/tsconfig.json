@@ -1,7 +1,10 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "noEmit": true
+    "noEmit": true,
+    // Isomorphic package consumed by worker + web: workers-types covers the
+    // shared Web APIs (streams, TextEncoder) without leaking DOM globals.
+    "types": ["@cloudflare/workers-types"]
   },
   "include": ["src"]
 }

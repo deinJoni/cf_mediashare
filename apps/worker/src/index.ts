@@ -6,6 +6,7 @@ import { accessMiddleware } from './middleware/access.js'
 import { adminMiddleware } from './middleware/admin.js'
 import { memberMiddleware } from './middleware/member.js'
 import { adminRoutes } from './routes/admin.js'
+import { archiveRoutes } from './routes/archive.js'
 import { mediaRoutes } from './routes/media.js'
 import { meRoutes } from './routes/me.js'
 import { uploadRoutes } from './routes/uploads.js'
@@ -32,6 +33,7 @@ app.use('/api/admin/*', adminMiddleware)
 app.route('/api', meRoutes)
 app.route('/api', uploadRoutes)
 app.route('/api', mediaRoutes)
+app.route('/api', archiveRoutes)
 app.route('/api', adminRoutes)
 
 /** Unknown API paths get the JSON error envelope, never the SPA fallback. */

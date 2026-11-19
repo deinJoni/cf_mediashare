@@ -18,6 +18,9 @@
  *   GET    /groups/:groupId/media      → ListMediaResponse     (F4)
  *   GET    /media/:id/:tier            → bytes                 (F5; tier = thumb|display|original)
  *   GET    /media/:id/download         → bytes, attachment     (F6)
+ *   GET    /groups/:id/archive/info    → ArchiveInfoResponse   (F6 bulk plan)
+ *   GET    /groups/:id/archive?part=N  → application/zip       (F6 bulk; or
+ *            ?ids=a,b,c for a bounded selection — byte stream, no envelope)
  *   PATCH  /media/:id                  → Media                 (F7 caption)
  *   DELETE /media/:id                  → OkResponse            (F7)
  *
@@ -192,6 +195,35 @@ export const ListMediaResponseSchema = z.object({
   nextCursor: z.string().nullable(),
 })
 export type ListMediaResponse = z.infer<typeof ListMediaResponseSchema>
+
+// --- Bulk archive (F6) ---------------------------------------------------------
+//
+// `GET /api/groups/:id/archive/info` answers with this plan; the client then
+// either links out to `GET /api/groups/:id/archive?part=N` (mobile / browsers
+// without the File System Access API — the zip lands in the OS download
+// manager) or streams the same items into a client-side zip (desktop).
+// `GET /api/groups/:id/archive?ids=` is the bounded-selection variant of the
+// same worker stream. Both produce the store-mode zip from shared/zip.ts.
+
+export const ArchivePartSchema = z.object({
+  /** 1-based part index for `?part=`. */
+  part: z.number().int().positive(),
+  itemCount: z.number().int().nonnegative(),
+  /** Sum of the originals' bytes in this part. */
+  bytes: z.number().int().nonnegative(),
+  /** Exact byte size of the emitted zip (headers + data + central directory). */
+  zipBytes: z.number().int().nonnegative(),
+})
+export type ArchivePart = z.infer<typeof ArchivePartSchema>
+
+export const ArchiveInfoResponseSchema = z.object({
+  itemCount: z.number().int().nonnegative(),
+  /** Sum of all originals' bytes in the group. */
+  totalBytes: z.number().int().nonnegative(),
+  /** Parts in newest-first order; a client downloads them in sequence. */
+  parts: z.array(ArchivePartSchema),
+})
+export type ArchiveInfoResponse = z.infer<typeof ArchiveInfoResponseSchema>
 
 // --- Manage (F7) -------------------------------------------------------------
 

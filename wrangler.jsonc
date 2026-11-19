@@ -11,6 +11,12 @@
     "enabled": true,
   },
 
+  // Server-side bulk zips (GET /api/groups/:id/archive) CRC32 every streamed
+  // byte — CPU-bound. The default 30 s paid-plan limit already covers the
+  // bounded part size; uncomment to raise headroom. Free plan stays capped and
+  // should rely on the client-side zip path (desktop) instead.
+  // "limits": { "cpu_ms": 300000 },
+
   // Built frontend, served as static assets. `/api/*` runs the Worker first;
   // everything else serves a static file, falling back to index.html (SPA).
   "assets": {

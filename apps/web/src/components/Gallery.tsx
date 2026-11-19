@@ -11,6 +11,9 @@ export function Gallery({
   onLoadMore,
   onOpen,
   onDropFiles,
+  selecting,
+  selectedIds,
+  onToggleSelect,
 }: {
   items: Media[]
   hasMore: boolean
@@ -19,6 +22,10 @@ export function Gallery({
   onLoadMore: () => void
   onOpen: (index: number) => void
   onDropFiles: (files: File[]) => void
+  /** Selection mode (F6): tiles toggle instead of opening the lightbox. */
+  selecting: boolean
+  selectedIds: ReadonlySet<string>
+  onToggleSelect: (id: string) => void
 }) {
   const sentinelRef = useRef<HTMLDivElement | null>(null)
   const [dragOver, setDragOver] = useState(false)
@@ -76,11 +83,17 @@ export function Gallery({
         {items.map((media, index) => (
           <button
             key={media.id}
-            className="tile"
-            onClick={() => onOpen(index)}
+            className={`tile${selectedIds.has(media.id) ? ' selected' : ''}`}
+            onClick={() => (selecting ? onToggleSelect(media.id) : onOpen(index))}
             aria-label={media.caption ?? media.fileName}
+            aria-pressed={selecting ? selectedIds.has(media.id) : undefined}
           >
             <img src={mediaUrl(media.id, 'thumb')} alt={media.caption ?? ''} loading="lazy" />
+            {selecting && (
+              <span className="tile-check" aria-hidden="true">
+                {selectedIds.has(media.id) ? '✓' : ''}
+              </span>
+            )}
             {media.kind === 'video' && (
               <span className="tile-badge">
                 <span aria-hidden="true">▶</span>

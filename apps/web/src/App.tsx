@@ -1,12 +1,38 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Media, MeResponse } from '@cf-mediashare/shared'
-import { ApiClientError, deleteMedia, getMe, listMedia, updateMedia } from './api/client.js'
+import {
+  ARCHIVE_MAX_SELECTION_IDS,
+  groupArchiveSelectionUrl,
+  groupArchiveUrl,
+  type ArchiveInfoResponse,
+  type Media,
+  type MeResponse,
+} from '@cf-mediashare/shared'
+import {
+  ApiClientError,
+  deleteMedia,
+  getArchiveInfo,
+  getMe,
+  listMedia,
+  updateMedia,
+} from './api/client.js'
 import { AdminPanel } from './components/AdminPanel.js'
 import { Gallery } from './components/Gallery.js'
 import { Lightbox } from './components/Lightbox.js'
 import { ToastShelf, useToasts } from './components/Toasts.js'
 import { UploadPanel } from './components/UploadPanel.js'
+import { canClientZip, downloadClientZip, isPickerAbort } from './lib/archive.js'
+import { formatBytes } from './lib/format.js'
 import { useUploader } from './lib/uploader.js'
+
+/** Hand a same-origin URL to the browser's download manager (mobile worker-zip path). */
+function triggerBrowserDownload(url: string): void {
+  const a = document.createElement('a')
+  a.href = url
+  a.download = ''
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+}
 
 type Session =
   | { state: 'loading' }
@@ -30,6 +56,12 @@ export function App() {
   const [galleries, setGalleries] = useState<Record<string, GalleryState>>({})
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const [view, setView] = useState<'gallery' | 'admin'>('gallery')
+  // Bulk-download state (F6): selection mode, part menu, client-side zip progress.
+  const [selecting, setSelecting] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [zipProgress, setZipProgress] = useState<{ written: number; total: number } | null>(null)
+  const [archiveMenu, setArchiveMenu] = useState<ArchiveInfoResponse | null>(null)
+  const [archiveMenuBusy, setArchiveMenuBusy] = useState(false)
   const { toasts, pushToast, dismissToast } = useToasts()
   // Guards double-fetches: the observer sentinel and effects can fire together.
   const inFlight = useRef(new Set<string>())
@@ -137,11 +169,50 @@ export function App() {
     if (selectedGroupId !== null) loadMore(selectedGroupId)
   }, [selectedGroupId, loadMore])
 
+  const exitSelecting = useCallback(() => {
+    setSelecting(false)
+    setSelectedIds(new Set())
+  }, [])
+
   const selectGroup = (groupId: string) => {
     setSelectedGroupId(groupId)
     setLightboxIndex(null)
+    setSelecting(false)
+    setSelectedIds(new Set())
+    setArchiveMenu(null)
     localStorage.setItem(GROUP_STORAGE_KEY, groupId)
   }
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+
+  /** Desktop path: pick a file once, stream the whole zip into it (F6). */
+  const runClientZip = useCallback(
+    async (items: Media[], suggestedName: string) => {
+      try {
+        setZipProgress({ written: 0, total: 1 })
+        await downloadClientZip(items, suggestedName, (written, total) =>
+          setZipProgress({ written, total }),
+        )
+        setSelecting(false)
+        setSelectedIds(new Set())
+      } catch (err) {
+        // Cancelling the save-picker is a no-op, not an error.
+        if (!isPickerAbort(err)) {
+          pushToast(err instanceof Error ? err.message : 'Download failed')
+        }
+      } finally {
+        setZipProgress(null)
+      }
+    },
+    [pushToast],
+  )
 
   const addFiles = (files: File[]) => {
     if (selectedGroupId === null) return
@@ -241,6 +312,77 @@ export function App() {
   const gallery =
     selectedGroupId !== null ? (galleries[selectedGroupId] ?? EMPTY_GALLERY) : EMPTY_GALLERY
 
+  const groupName = me.groups.find((g) => g.id === selectedGroupId)?.name ?? 'archive'
+
+  /** Selection download (F6): client-side zip where the browser allows it. */
+  const downloadSelected = async () => {
+    if (selectedGroupId === null) return
+    const items = gallery.items.filter((m) => selectedIds.has(m.id))
+    if (items.length === 0) return
+    if (canClientZip()) {
+      await runClientZip(items, `${groupName}-selection.zip`)
+      return
+    }
+    // Worker-zip path (mobile/Safari/Firefox): ids ride in the URL, capped.
+    if (items.length > ARCHIVE_MAX_SELECTION_IDS) {
+      pushToast(
+        `On this browser a selection download is capped at ${ARCHIVE_MAX_SELECTION_IDS} items — ` +
+          'pick fewer, or use Download all which streams in parts.',
+      )
+      return
+    }
+    triggerBrowserDownload(
+      groupArchiveSelectionUrl(
+        selectedGroupId,
+        items.map((m) => m.id),
+      ),
+    )
+    setSelecting(false)
+    setSelectedIds(new Set())
+  }
+
+  /** Download all (F6). The full item list is walked fresh — the gallery may
+   * only have a few pages loaded, and JSON pages are cheap next to the bytes. */
+  const downloadAll = async () => {
+    if (selectedGroupId === null) return
+    if (canClientZip()) {
+      try {
+        const items: Media[] = []
+        let cursor: string | undefined
+        for (;;) {
+          const page = await listMedia(selectedGroupId, cursor ? { cursor } : {})
+          items.push(...page.items)
+          if (page.nextCursor === null) break
+          cursor = page.nextCursor
+        }
+        if (items.length === 0) return
+        await runClientZip(items, `${groupName}.zip`)
+      } catch (err) {
+        if (!isPickerAbort(err)) {
+          pushToast(err instanceof Error ? err.message : 'Download failed')
+        }
+      }
+      return
+    }
+    // Worker-zip path: fetch the part plan. One part → straight to the
+    // download manager; several → menu so the member grabs them in order.
+    setArchiveMenuBusy(true)
+    try {
+      const info = await getArchiveInfo(selectedGroupId)
+      if (info.parts.length === 0) {
+        pushToast('Nothing to download yet')
+      } else if (info.parts.length === 1) {
+        triggerBrowserDownload(groupArchiveUrl(selectedGroupId, 1))
+      } else {
+        setArchiveMenu(info)
+      }
+    } catch (err) {
+      pushToast(err instanceof Error ? err.message : 'Could not plan the download')
+    } finally {
+      setArchiveMenuBusy(false)
+    }
+  }
+
   return (
     <div className="app">
       <header className="topbar">
@@ -258,6 +400,44 @@ export function App() {
           ))}
         </nav>
         <div className="topbar-right">
+          {selectedGroupId !== null && gallery.items.length > 0 && (
+            <>
+              <button className="ghost-btn" onClick={() => setSelecting(true)}>
+                Select
+              </button>
+              <span className="download-all-wrap">
+                <button
+                  className="ghost-btn"
+                  disabled={archiveMenuBusy}
+                  onClick={() => void downloadAll()}
+                >
+                  {archiveMenuBusy ? 'Planning…' : 'Download all'}
+                </button>
+                {archiveMenu && (
+                  <div className="download-menu" role="menu">
+                    <p className="download-menu-head">
+                      {archiveMenu.itemCount} items · {formatBytes(archiveMenu.totalBytes)} — grab
+                      each part:
+                    </p>
+                    {archiveMenu.parts.map((p) => (
+                      <a
+                        key={p.part}
+                        className="download-part"
+                        href={groupArchiveUrl(selectedGroupId, p.part)}
+                        download
+                      >
+                        Part {p.part} of {archiveMenu.parts.length} · {p.itemCount} items ·{' '}
+                        {formatBytes(p.zipBytes)}
+                      </a>
+                    ))}
+                    <button className="link-btn" onClick={() => setArchiveMenu(null)}>
+                      Close
+                    </button>
+                  </div>
+                )}
+              </span>
+            </>
+          )}
           {selectedGroupId !== null && (
             <label className="btn upload-btn">
               Upload
@@ -281,8 +461,35 @@ export function App() {
           <span className="user-email" title={me.user.email}>
             {me.user.email}
           </span>
+          {zipProgress !== null && (
+            <span className="zip-progress" role="status">
+              Zipping… {Math.round((zipProgress.written / zipProgress.total) * 100)}%
+            </span>
+          )}
         </div>
       </header>
+
+      {selecting && (
+        <div className="selection-bar" role="toolbar" aria-label="Selection">
+          <span className="selection-count">{selectedIds.size} selected</span>
+          <button
+            className="link-btn"
+            onClick={() => setSelectedIds(new Set(gallery.items.map((m) => m.id)))}
+          >
+            Select all loaded
+          </button>
+          <button
+            className="btn"
+            disabled={selectedIds.size === 0 || zipProgress !== null}
+            onClick={() => void downloadSelected()}
+          >
+            Download zip
+          </button>
+          <button className="link-btn" onClick={exitSelecting}>
+            Cancel
+          </button>
+        </div>
+      )}
 
       {me.groups.length === 0 ? (
         <main className="screen-center">
@@ -304,6 +511,9 @@ export function App() {
           onLoadMore={loadSelected}
           onOpen={setLightboxIndex}
           onDropFiles={addFiles}
+          selecting={selecting}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
         />
       )}
 
