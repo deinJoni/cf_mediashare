@@ -75,14 +75,19 @@ function ensureBucket() {
 // the PUT. Pass --origin to pin it to your app origin instead of "*".
 function setBucketCors() {
   log(`Setting CORS rules on "${R2_BUCKET}" (origin: ${corsOrigin})`)
-  const rules = [
-    {
-      AllowedOrigins: [corsOrigin],
-      AllowedMethods: ['GET', 'PUT'],
-      AllowedHeaders: ['content-type'],
-      MaxAgeSeconds: 3600,
-    },
-  ]
+  const rules = {
+    rules: [
+      {
+        allowed: {
+          origins: [corsOrigin],
+          methods: ['GET', 'PUT', 'HEAD'],
+          headers: ['*'],
+        },
+        exposeHeaders: ['ETag'],
+        maxAgeSeconds: 3600,
+      },
+    ],
+  }
   const tmp = mkdtempSync(join(tmpdir(), 'cf-mediashare-'))
   const file = join(tmp, 'cors.json')
   writeFileSync(file, JSON.stringify(rules, null, 2))
