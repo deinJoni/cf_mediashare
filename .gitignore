@@ -36,3 +36,6 @@ pnpm-debug.log*
 # Local agent state
 .claude/
 .playwright-mcp/
+
+# Deployment seed with real member emails — copy of seed.example.sql
+scripts/setup/seed.sql
