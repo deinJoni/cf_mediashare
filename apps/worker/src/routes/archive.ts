@@ -92,7 +92,7 @@ export const archiveRoutes = new Hono<AppBindings>()
     }
 
     const rows = await listGroupMediaForArchive(c.env.DB, groupId)
-    const parts = partitionArchive(rows)
+    const parts = partitionArchive(rows, (r) => r.size_bytes)
     const body: ArchiveInfoResponse = {
       itemCount: rows.length,
       totalBytes: rows.reduce((sum, r) => sum + r.size_bytes, 0),
@@ -150,7 +150,7 @@ export const archiveRoutes = new Hono<AppBindings>()
     }
 
     const rows = await listGroupMediaForArchive(c.env.DB, groupId)
-    const parts = partitionArchive(rows)
+    const parts = partitionArchive(rows, (r) => r.size_bytes)
     const items = parts[part - 1]
     if (!items) {
       return c.json(apiError('not_found', `No part ${part}`), 404)

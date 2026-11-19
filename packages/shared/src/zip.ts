@@ -22,11 +22,13 @@ import { ARCHIVE_PART_MAX_BYTES, ARCHIVE_PART_MAX_ITEMS } from './constants.js'
  * Split an ordered item list into bounded archive parts (F6): a part closes
  * when the next item would push it past the byte or item bound. An item larger
  * than the byte bound gets a part to itself — boundedness is about resumable
- * downloads, not a hard ceiling. Callers pass items in archive order (newest
- * first, matching the gallery).
+ * downloads, not a hard ceiling. `sizeOf` lets callers partition whatever row
+ * shape they hold (D1 `size_bytes` rows, wire `sizeBytes` media). Items go in
+ * archive order (newest first, matching the gallery).
  */
-export function partitionArchive<T extends { sizeBytes: number }>(
+export function partitionArchive<T>(
   items: T[],
+  sizeOf: (item: T) => number,
   maxBytes = ARCHIVE_PART_MAX_BYTES,
   maxItems = ARCHIVE_PART_MAX_ITEMS,
 ): T[][] {
@@ -34,16 +36,14 @@ export function partitionArchive<T extends { sizeBytes: number }>(
   let current: T[] = []
   let bytes = 0
   for (const item of items) {
-    if (
-      current.length > 0 &&
-      (bytes + item.sizeBytes > maxBytes || current.length >= maxItems)
-    ) {
+    const size = sizeOf(item)
+    if (current.length > 0 && (bytes + size > maxBytes || current.length >= maxItems)) {
       parts.push(current)
       current = []
       bytes = 0
     }
     current.push(item)
-    bytes += item.sizeBytes
+    bytes += size
   }
   if (current.length > 0) parts.push(current)
   return parts
@@ -76,8 +76,8 @@ export class Crc32 {
   update(chunk: Uint8Array): void {
     const table = getCrcTable()
     let c = this.state
-    for (let i = 0; i < chunk.length; i++) {
-      c = table[(c ^ chunk[i]) & 0xff] ^ (c >>> 8)
+    for (const byte of chunk) {
+      c = (table[(c ^ byte) & 0xff] as number) ^ (c >>> 8)
     }
     this.state = c
   }
@@ -89,6 +89,7 @@ export class Crc32 {
 
 // --- Entry names --------------------------------------------------------------
 
+// eslint-disable-next-line no-control-regex -- stripping control chars is the point
 const BAD_CHARS_RE = /[\x00-\x1f<>:"|?*]/g
 const encoder = new TextEncoder()
 const MAX_NAME_BYTES = 400
@@ -111,7 +112,8 @@ function sanitizeSegment(segment: string): string | null {
 function capUtf8(value: string, maxBytes: number): string {
   const bytes = encoder.encode(value)
   if (bytes.length <= maxBytes) return value
-  return new TextDecoder('utf-8', { fatal: false }).decode(bytes.subarray(0, maxBytes))
+  // Default (non-fatal) decoding drops a half-cut multibyte tail cleanly.
+  return new TextDecoder('utf-8').decode(bytes.subarray(0, maxBytes))
 }
 
 /**
@@ -430,28 +432,28 @@ export function zipStore(
 
 /**
  * Exact archive byte size — for Content-Length and the UI's size labels. Runs
- * the same name resolution the writer does, so the result can't drift. Throws
- * nothing; assumes inputs match what the writer will see (same order).
+ * the same name resolution the writer does (sanitize + dedupe in order), so
+ * the result can't drift. Throws nothing; assumes inputs match what the writer
+ * will see (same order).
  */
 export function zipPlannedSize(entries: { name: string; sizeBytes: number }[]): number {
-  const names = resolveZipNames(entries.map((e) => e.name))
-  let dataEnd = 0
+  const used = new Set<string>()
+  let offset = 0 // also the central-directory offset once the loop ends
   let cd = 0
   let anyZip64 = false
-  let offset = 0
-  for (let i = 0; i < entries.length; i++) {
-    const nameLen = encoder.encode(names[i]).length
-    const zip64 = entries[i].sizeBytes >= U32_MAX
+  for (const e of entries) {
+    const nameLen = encoder.encode(dedupeName(sanitizeZipName(e.name), used)).length
+    const zip64 = e.sizeBytes >= U32_MAX
     if (zip64) anyZip64 = true
     const localHeaderOffset = offset
-    offset += 30 + nameLen + entries[i].sizeBytes + (zip64 ? 24 : 16)
+    offset += 30 + nameLen + e.sizeBytes + (zip64 ? 24 : 16)
     const offset64 = localHeaderOffset >= U32_MAX
     // zip64 extra block: 4-byte header + 8 per stored value. Order is fixed
     // (usize, csize, offset) and only fields that needed the sentinel appear.
     const extraLen = zip64 && offset64 ? 28 : zip64 ? 20 : offset64 ? 12 : 0
     cd += 46 + nameLen + extraLen
   }
-  dataEnd = offset
+  const dataEnd = offset
   const needZip64Eocd =
     anyZip64 || entries.length > 0xffff || cd >= U32_MAX || dataEnd >= U32_MAX
   return dataEnd + cd + (needZip64Eocd ? 56 + 20 : 0) + 22
