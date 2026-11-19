@@ -4,6 +4,7 @@ import { mediaUrl, type Media } from '@cf-mediashare/shared'
 import { formatDuration } from '../lib/format.js'
 
 export function Gallery({
+  groupName,
   items,
   hasMore,
   loading,
@@ -15,6 +16,8 @@ export function Gallery({
   selectedIds,
   onToggleSelect,
 }: {
+  /** Name of the group uploads land in — shown on the drop overlay. */
+  groupName: string
   items: Media[]
   hasMore: boolean
   loading: boolean
@@ -75,7 +78,9 @@ export function Gallery({
       {items.length === 0 && !loading && !error && (
         <div className="empty-state">
           <p>Nothing here yet.</p>
-          <p className="muted">Drop photos or videos anywhere, or use the Upload button.</p>
+          <p className="muted">
+            Drop photos or videos anywhere to add them to {groupName}, or use the Upload button.
+          </p>
         </div>
       )}
 
@@ -117,7 +122,7 @@ export function Gallery({
 
       {dragOver && (
         <div className="drop-overlay" aria-hidden="true">
-          <span>Drop to upload</span>
+          <span>Drop to upload to {groupName}</span>
         </div>
       )}
     </section>

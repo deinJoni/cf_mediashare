@@ -59,6 +59,7 @@ export function App() {
   // Bulk-download state (F6): selection mode, part menu, client-side zip progress.
   const [selecting, setSelecting] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [deleting, setDeleting] = useState(false)
   const [zipProgress, setZipProgress] = useState<{ written: number; total: number } | null>(null)
   const [archiveMenu, setArchiveMenu] = useState<ArchiveInfoResponse | null>(null)
   const [archiveMenuBusy, setArchiveMenuBusy] = useState(false)
@@ -341,6 +342,41 @@ export function App() {
     setSelectedIds(new Set())
   }
 
+  /** Bulk delete (admins: any item; members: own uploads). Server enforces the
+   * same rule — `deletable` just keeps the count + confirm honest. */
+  const deleteSelected = async () => {
+    const deletable = gallery.items.filter(
+      (m) => selectedIds.has(m.id) && (me.user.isAdmin || m.uploaderId === me.user.id),
+    )
+    if (deletable.length === 0) return
+    const skipped = selectedIds.size - deletable.length
+    const note = skipped > 0 ? ` (${skipped} selected item(s) aren't yours and will be kept)` : ''
+    if (!window.confirm(`Delete ${deletable.length} item(s)?${note} This can't be undone.`)) return
+    setDeleting(true)
+    try {
+      const results = await Promise.allSettled(deletable.map((m) => deleteMedia(m.id)))
+      const failed = results.filter((r) => r.status === 'rejected').length
+      const deletedIds = new Set(
+        deletable.filter((_, i) => results[i]?.status === 'fulfilled').map((m) => m.id),
+      )
+      if (deletedIds.size > 0 && selectedGroupId !== null) {
+        setGalleries((prev) => {
+          const g = prev[selectedGroupId]
+          if (!g) return prev
+          return {
+            ...prev,
+            [selectedGroupId]: { ...g, items: g.items.filter((m) => !deletedIds.has(m.id)) },
+          }
+        })
+      }
+      if (failed > 0) pushToast(`${failed} item(s) could not be deleted`)
+      if (deletedIds.size === selectedIds.size || failed === 0) exitSelecting()
+      else setSelectedIds((prev) => new Set([...prev].filter((id) => !deletedIds.has(id))))
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   /** Download all (F6). The full item list is walked fresh — the gallery may
    * only have a few pages loaded, and JSON pages are cheap next to the bytes. */
   const downloadAll = async () => {
@@ -438,9 +474,23 @@ export function App() {
               </span>
             </>
           )}
+          {me.groups.length > 1 && selectedGroupId !== null && (
+            <select
+              className="group-select"
+              value={selectedGroupId}
+              aria-label="Group to view and upload to"
+              onChange={(e) => selectGroup(e.target.value)}
+            >
+              {me.groups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}
+                </option>
+              ))}
+            </select>
+          )}
           {selectedGroupId !== null && (
-            <label className="btn upload-btn">
-              Upload
+            <label className="btn upload-btn" title={`Uploads go to ${groupName}`}>
+              Upload to {groupName}
               <input
                 type="file"
                 multiple
@@ -485,6 +535,23 @@ export function App() {
           >
             Download zip
           </button>
+          {(() => {
+            const deletable = gallery.items.filter(
+              (m) => selectedIds.has(m.id) && (me.user.isAdmin || m.uploaderId === me.user.id),
+            ).length
+            return (
+              <button
+                className="ghost-btn danger"
+                disabled={deletable === 0 || deleting}
+                title={
+                  deletable === 0 ? 'You can only delete items you uploaded' : undefined
+                }
+                onClick={() => void deleteSelected()}
+              >
+                {deleting ? 'Deleting…' : `Delete${deletable > 0 ? ` (${deletable})` : ''}`}
+              </button>
+            )
+          })()}
           <button className="link-btn" onClick={exitSelecting}>
             Cancel
           </button>
@@ -500,6 +567,7 @@ export function App() {
         </main>
       ) : (
         <Gallery
+          groupName={groupName}
           items={gallery.items}
           // 'error' must NOT count as hasMore: the observer sentinel would
           // refetch in a tight loop. Recovery goes through the Retry button.

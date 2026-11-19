@@ -194,6 +194,20 @@ button {
   cursor: pointer;
 }
 
+.group-select {
+  padding: 0.35rem 0.7rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  color: var(--fg);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.group-select:hover {
+  border-color: var(--accent);
+}
+
 .user-email {
   color: var(--muted);
   font-size: 0.85rem;
@@ -272,6 +286,15 @@ button {
 .ghost-btn:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+.ghost-btn.danger {
+  color: var(--err);
+  border-color: color-mix(in srgb, var(--err) 45%, transparent);
+}
+
+.ghost-btn.danger:hover:not(:disabled) {
+  border-color: var(--err);
 }
 
 .selection-bar {
